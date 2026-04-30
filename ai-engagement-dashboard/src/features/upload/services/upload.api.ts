@@ -1,9 +1,9 @@
-import { mockData } from "../../critique/data/mockData"; // เปลี่ยนจาก mockCritiqueData เป็น mockData
+import { mockCritiqueData } from "../../critique/data/mockData";
 
 export const submitDesign = async () => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(mockData); // ใช้ชื่อตัวแปรที่แก้ให้ตรงกัน
+      resolve(mockCritiqueData);
     }, 1000);
   });
 };
