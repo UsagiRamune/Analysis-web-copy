@@ -7,10 +7,10 @@ import RoleRoute from './RoleRoute'
 import StudentDashboardPage from '../features/student/pages/StudentDashboardPage'
 import JoinCoursePage from '../features/student/pages/JoinCoursePage'
 import CourseDetailPage from '../features/student/pages/CourseDetailPage'
-import SetupPage from '../features/project/pages/SetupPage'
-import BuildPage from '../features/project/pages/BuildPage'
-import GuardrailPage from '../features/project/pages/GuardrailPage'
-import OutputPage from '../features/project/pages/OutputPage'
+import SetupPage from '../features/projects/pages/SetupPage'
+import BuildPage from '../features/projects/pages/BuildPage'
+import GuardrailPage from '../features/projects/pages/GuardrailPage'
+import OutputPage from '../features/projects/pages/OutputPage'
 import ProfilePage from '../features/profile/pages/ProfilePage'
 import InstructorDashboardPage from '../features/instructor/pages/InstructorDashboardPage'
 import InstructorCoursesPage from '../features/instructor/pages/InstructorCoursesPage'
@@ -18,6 +18,7 @@ import InstructorProjectsPage from '../features/instructor/pages/InstructorProje
 import InstructorProjectDetailPage from '../features/instructor/pages/InstructorProjectDetailPage'
 import InstructorStudentProfilePage from '../features/instructor/pages/InstructorStudentProfilePage'
 import Spinner from '../shared/components/Spinner'
+import ProjectLayout from '../features/projects/pages/ProjectLayout'
 
 // RoleRedirect — routes user to their role-specific home page.
 // ProtectedRoute guarantees a session exists before this renders,
@@ -86,26 +87,31 @@ export const router = createBrowserRouter([
 
       // Project flow — /project/new uses SetupPage with courseId from query
       {
-        path: '/project/new',
-        element: <SetupPage />,
-      },
-      {
-        path: '/project/:id/setup',
-        element: <SetupPage />,
-      },
-      {
-        path: '/project/:id/build',
-        element: <BuildPage />,
-      },
-      {
-        path: '/project/:id/guardrail',
-        element: <GuardrailPage />,
-      },
-      {
-        path: '/project/:id/output',
-        element: <OutputPage />,
-      },
+        element: <ProjectLayout />,
+        children: [
+          {
+            path: '/project/new',
+            element: <SetupPage />,
+          },
+          {
+            path: '/project/:id/setup',
+            element: <SetupPage />,
+          },
+          {
+            path: '/project/:id/build',
+            element: <BuildPage />,
+          },
+          {
+            path: '/project/:id/guardrail',
+            element: <GuardrailPage />,
+          },
+          {
+            path: '/project/:id/output',
+            element: <OutputPage />,
+          },
 
+          ],
+        },
       // Instructor routes (require instructor role)
       {
         element: <RoleRoute role="instructor" />,

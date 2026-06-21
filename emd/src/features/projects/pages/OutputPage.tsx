@@ -11,7 +11,7 @@ import {
   submitProject,
   resubmitProject,
   deleteProject,
-} from '../../projects/services/projects.service'
+} from '../services/projects.service'
 import type { Project, AdPlacement, IapItem, AdsConfig, IapConfig } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'

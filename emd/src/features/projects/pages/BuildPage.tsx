@@ -13,7 +13,7 @@ import {
   listIapItems,
   createIapItem,
   deleteIapItem,
-} from '../../projects/services/projects.service'
+} from '../services/projects.service'
 import type { AdPlacement, IapItem, AdsConfig, IapConfig, Project } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'

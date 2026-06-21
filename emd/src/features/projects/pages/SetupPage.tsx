@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/context/useAuth'
-import { createProject, getProject, updateProject } from '../../projects/services/projects.service'
+import { createProject, getProject, updateProject } from '../services/projects.service'
 import type { Project } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'

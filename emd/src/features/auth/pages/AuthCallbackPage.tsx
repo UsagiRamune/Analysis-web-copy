@@ -1,30 +1,28 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { supabase } from '../../../lib/supabase'
 import Spinner from '../../../shared/components/Spinner'
 
-// This page handles the redirect after Google OAuth.
-// Supabase will append the session tokens to the URL hash/query.
-// We read the session here, then route based on user role.
+// หน้านี้รับ redirect หลัง Google OAuth
+// Supabase แปะ token มาใน URL hash (#access_token=...) แล้วประมวลผลแบบ async
+// เราจึง "รอฟัง" onAuthStateChange แทนการเรียก getSession() ทันที
+// (getSession() เร็วเกินไป — hash ยังไม่ถูกแลกเป็น session บน localhost)
 export default function AuthCallbackPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    async function handleCallback() {
-      // getSession() reads the session from URL hash injected by Supabase Auth
-      const { data: { session }, error } = await supabase.auth.getSession()
+    let done = false  // กันทำงานซ้ำ (StrictMode ยิง effect 2 รอบ)
 
-      if (error || !session) {
-        console.error('Auth callback error:', error?.message)
-        navigate('/login')
-        return
-      }
+    // routeByRole — อ่าน role แล้วพาไปหน้าที่ถูก
+    async function routeByRole(userId: string) {
+      if (done) return
+      done = true
 
-      // Fetch profile to get the user's role
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single()
 
       if (profile && 'role' in profile && profile.role === 'instructor') {
@@ -34,7 +32,34 @@ export default function AuthCallbackPage() {
       }
     }
 
-    handleCallback()
+    // 1) ฟัง event — ตัวนี้จะยิงเมื่อ Supabase แลก hash เป็น session เสร็จ
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent, session: Session | null) => {
+        if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+          routeByRole(session.user.id)
+        }
+      }
+    )
+
+    // 2) เผื่อ session ถูกแลกเสร็จไปแล้วก่อน listener ติด — เช็คซ้ำอีกชั้น
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        routeByRole(session.user.id)
+      }
+    })
+
+    // 3) timeout กันค้าง — ถ้า 5 วิยังไม่มี session อะไรเลย กลับ login
+    const timer = setTimeout(() => {
+      if (!done) {
+        console.error('Auth callback timeout — ไม่พบ session')
+        navigate('/login', { replace: true })
+      }
+    }, 5000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timer)
+    }
   }, [navigate])
 
   return (
