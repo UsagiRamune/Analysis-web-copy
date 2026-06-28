@@ -23,6 +23,13 @@ export default function LoginPage() {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        // บังคับให้ Google โชว์หน้าเลือก account ทุกครั้ง — ไม่ auto-skip ไป
+        // account ล่าสุดที่เคย login (ดีสำหรับ dev/คนมีหลาย account ที่ต้อง
+        // สลับบ่อย) คนที่ใช้ account เดิมก็แค่คลิกเลือกอันเดิม เร็วกว่าพิมพ์
+        // email/password ใหม่ทุกรอบอยู่ดี
+        queryParams: {
+          prompt: 'select_account',
+        },
       },
     })
 

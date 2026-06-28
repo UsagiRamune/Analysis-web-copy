@@ -8,6 +8,7 @@ import Card from '../../../shared/components/Card'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
+import { useChat } from '../context/ChatContext'
 
 const MAIN_GENRES = ['Puzzle', 'Action', 'RPG', 'Simulation', 'Strategy', 'Casual', 'Sports', 'Adventure']
 const MORE_GENRES = [
@@ -59,6 +60,27 @@ export default function SetupPage() {
   const [coreMechanic, setCoreMechanic] = useState('')
   const [sessionLength, setSessionLength] = useState('5-10 min')
 
+  const { setLiveDraft } = useChat()
+
+  // push state ฟอร์มขึ้น ChatContext ทุกครั้งที่เปลี่ยน — ให้ AI อ่านสดได้
+  // โดยไม่ต้อง save DB ก่อน (ตามหลัก "Setup อ่านสด / Build+ อ่าน DB")
+  useEffect(() => {
+    setLiveDraft({
+      title,
+      genre,
+      platform,
+      target_audience: customTargetAudience.trim() || targetAudience.trim() || null,
+      core_mechanic: coreMechanic.trim() || null,
+      session_length: sessionLength || null,
+      current_step: 1,
+    })
+  }, [title, genre, platform, targetAudience, customTargetAudience, coreMechanic, sessionLength, setLiveDraft])
+
+  // เคลียร์ liveDraft ตอนออกจากหน้า Setup — หน้าอื่นจะอ่านจาก DB แทน
+  useEffect(() => {
+    return () => setLiveDraft(null)
+  }, [setLiveDraft])
+
   useEffect(() => {
     async function load() {
       if (projectId) {
@@ -96,51 +118,73 @@ export default function SetupPage() {
     setCustomPlatform('')
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
+  // logic เซฟกลาง — ใช้ทั้ง Save Draft และ Continue
+  // ต่างกันแค่ current_step (Continue = step 2, Save Draft = คงสถานะปัจจุบันไม่ขยับ)
+  // current_step ของอาจารย์ (draft tracking) ไม่ถูกแก้ถ้าไม่ได้ตั้งใจส่งมา
+  async function saveProject(nextStep?: number): Promise<string | null> {
     if (!title.trim()) {
       setError('Game title is required')
-      return
+      return null
+    }
+    if (!user) return null
+
+    let savedProjectId: string | undefined = projectId
+
+    if (!savedProjectId) {
+      if (!courseIdFromQuery) {
+        setError('Course ID is missing. Please return to the dashboard.')
+        return null
+      }
+      const newProject = await createProject({
+        course_id: courseIdFromQuery,
+        title: title.trim(),
+      })
+      savedProjectId = newProject.id as string
     }
 
-    if (!user) return
+    const finalTargetAudience = customTargetAudience.trim() || targetAudience.trim()
 
+    await updateProject(savedProjectId, {
+      title: title.trim(),
+      genre: genre.length > 0 ? genre : null,
+      platform: platform.length > 0 ? platform : null,
+      target_audience: finalTargetAudience || null,
+      core_mechanic: coreMechanic.trim() || null,
+      session_length: sessionLength || null,
+      ...(nextStep != null ? { current_step: nextStep } : {}),
+    })
+
+    return savedProjectId as string
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
     setSaving(true)
     setError(null)
-
     try {
-      let savedProjectId = projectId
-
-      if (!savedProjectId) {
-        if (!courseIdFromQuery) {
-          setError('Course ID is missing. Please return to the dashboard.')
-          setSaving(false)
-          return
-        }
-        const newProject = await createProject({
-          course_id: courseIdFromQuery,
-          title: title.trim(),
-        })
-        savedProjectId = newProject.id
+      const savedProjectId = await saveProject(2)
+      if (savedProjectId) {
+        navigate(`/project/${savedProjectId}/build`)
       }
-
-      const finalTargetAudience = customTargetAudience.trim() || targetAudience.trim()
-
-      await updateProject(savedProjectId, {
-        title: title.trim(),
-        genre: genre.length > 0 ? genre : null,
-        platform: platform.length > 0 ? platform : null,
-        target_audience: finalTargetAudience || null,
-        core_mechanic: coreMechanic.trim() || null,
-        session_length: sessionLength || null,
-        current_step: 2,
-      })
-
-      navigate(`/project/${savedProjectId}/build`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save Draft — เซฟข้อมูลจริง (เดิมแค่ navigate ทิ้งข้อมูล) แล้วกลับ dashboard
+  // ไม่ส่ง current_step ไป จึงไม่กระทบสถานะ draft-tracking ที่อาจารย์ใช้ดูความคืบหน้า
+  async function handleSaveDraft() {
+    setSaving(true)
+    setError(null)
+    try {
+      const savedProjectId = await saveProject()
+      if (savedProjectId) {
+        navigate('/dashboard')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save draft')
       setSaving(false)
     }
   }
@@ -399,15 +443,16 @@ export default function SetupPage() {
             </dl>
           </Card>
 
-          <AiSuggestionPanel stage="setup" />
+          <AiSuggestionPanel stage="setup" projectId={projectId ?? ''} />
 
           <div className="sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
-              className="flex-1 rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              onClick={handleSaveDraft}
+              disabled={saving}
+              className="flex-1 rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
-              Save Draft
+              {saving ? 'Saving...' : 'Save Draft'}
             </button>
             <button
               type="submit"

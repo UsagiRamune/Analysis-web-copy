@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import jsPDF from 'jspdf'
+import { registerThaiFont } from '../../../lib/pdf-thai-font'
+import { preloadThaiFonts, drawThaiText, drawThaiTextLines, wrapThaiText } from '../../../lib/thai-text-renderer'
+import { loadSuggestions } from '../services/chat.service'
 import {
   getProject,
   updateProject,
@@ -18,6 +21,7 @@ import Card from '../../../shared/components/Card'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
+import AiSuggestionPanel from './components/AiSuggestionPanel'
 
 type PdfExportMode = 'data' | 'ai'
 
@@ -173,7 +177,11 @@ export default function OutputPage() {
     ]
 
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    // เติม UTF-8 BOM (\uFEFF) นำหน้า — Excel ไม่อ่าน charset จาก Blob MIME type
+    // เลย ถ้าไม่มี BOM มันเดา encoding เป็น ANSI/Windows-1252 แทน UTF-8 โดย
+    // default ทำให้ตัวอักษรไทยกลายเป็นสัญลักษณ์มั่ว ๆ ตอนเปิดในโปรแกรมที่ไม่ใช่
+    // text editor (Notepad/เครื่อง Linux อ่านได้ปกติเพราะมันเดา UTF-8 เป็นทุนเดิม)
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -182,13 +190,17 @@ export default function OutputPage() {
     URL.revokeObjectURL(url)
   }
 
-  function handleExportPDF(mode: PdfExportMode) {
+  async function handleExportPDF(mode: PdfExportMode) {
     if (!project) return
+    // โหลดฟอนต์ Sarabun เข้า browser ก่อน (สำหรับ canvas rendering) — ต้องรอ
+    // ให้เสร็จก่อนเริ่มวาดอะไรเลย ไม่งั้น canvas จะ fallback ไปฟอนต์ default
+    await preloadThaiFonts()
     const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true })
+    registerThaiFont(doc)
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
     const margin = 14
-    const contentWidth = pageWidth - margin * 2
+    const contentWidth = pageWidth - margin * 2 // 182mm
     const orange: [number, number, number] = [245, 130, 32]
     const ink: [number, number, number] = [35, 31, 27]
     const muted: [number, number, number] = [76, 93, 116]
@@ -214,39 +226,28 @@ export default function OutputPage() {
     const riskLabel = riskScore >= 7 ? 'High' : riskScore >= 4 ? 'Medium' : 'Low'
     const vagueItems = iapItems.filter((item) => !item.description).length
     const unpricedItems = iapItems.filter((item) => item.price_usd == null).length
-    const aiSuggestions: string[][] = [
-      [
-        'Ad pressure',
-        missingCaps > 0 ? 'High priority' : interstitials > 1 ? 'Review' : 'Looks controlled',
-        missingCaps > 0
-          ? `Add frequency caps to ${missingCaps} ad placement(s) before submitting.`
-          : interstitials > 1
-            ? 'Reduce interstitial moments or move one to rewarded ads so players stay in control.'
-            : 'Keep rewarded ads optional and preserve the current pressure level.',
-      ],
-      [
-        'IAP clarity',
-        vagueItems > 0 || unpricedItems > 0 ? 'High priority' : 'Looks clear',
-        vagueItems > 0 || unpricedItems > 0
-          ? `Clarify benefit and price for ${Math.max(vagueItems, unpricedItems)} purchase item(s).`
-          : 'The catalog explains player benefit and price well enough for review.',
-      ],
-      [
-        'Revenue balance',
-        riskScore >= 7 ? 'Needs tuning' : 'Balanced',
-        riskScore >= 7
-          ? 'Lower pressure by limiting interruption points and keeping paid boosts optional.'
-          : 'Explain why this mix earns revenue without blocking normal progress.',
-      ],
-      [
-        'Pitch focus',
-        'Recommended',
-        'Lead the pitch with fairness evidence: optionality, clear value, and caps.',
-      ],
-    ]
 
-    function setText(color: [number, number, number] = ink) {
-      doc.setTextColor(color[0], color[1], color[2])
+    // ดึงคำแนะนำ AI จริงจาก Supabase (ai_suggestions) — เฉพาะตอน export AI PDF
+    const rawSuggestions = mode === 'ai' ? await loadSuggestions(project.id) : []
+    const categoryLabels: Record<string, string> = {
+      title: 'ชื่อเกม',
+      genre: 'แนวเกม',
+      platform: 'แพลตฟอร์ม',
+      target_audience: 'กลุ่มเป้าหมาย',
+      core_mechanic: 'Core Loop',
+      session_length: 'ความยาว Session',
+      revenue_mix: 'สัดส่วนรายได้',
+      monetization_design: 'การออกแบบ Monetization',
+    }
+    const aiSuggestions: string[][] = rawSuggestions.map((s) => [
+      categoryLabels[s.category] ?? s.category,
+      s.advice,
+    ])
+
+    // ความสูงบรรทัดจริง (mm) ตาม fontSize ปัจจุบัน — ต้องหารด้วย scaleFactor
+    // เพราะ doc.getLineHeight() คืนค่าในหน่วยภายในของ jsPDF (pt-equivalent)
+    function lineHeightMm(): number {
+      return doc.getLineHeight() / doc.internal.scaleFactor
     }
 
     function addPageIfNeeded(height = 24) {
@@ -259,32 +260,31 @@ export default function OutputPage() {
     function footer() {
       doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2])
       doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      setText(muted)
-      doc.text('Generated by Ethical Monetization Designer', margin, pageHeight - 5)
-      doc.text(`Page ${doc.getNumberOfPages()}`, pageWidth - margin, pageHeight - 5, { align: 'right' })
+      drawThaiText(doc, 'Generated by Ethical Monetization Designer', margin, pageHeight - 5, {
+        fontSize: 8,
+        color: muted,
+      })
+      drawThaiText(doc, `Page ${doc.getNumberOfPages()}`, pageWidth - margin, pageHeight - 5, {
+        fontSize: 8,
+        color: muted,
+        align: 'right',
+      })
     }
 
     function title(text: string, size = 13) {
       addPageIfNeeded(14)
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(size)
-      setText(ink)
-      doc.text(text, margin, y)
-      y += 5
+      drawThaiText(doc, text, margin, y, { fontSize: size, bold: true, color: ink })
+      y += 4
       doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2])
       doc.line(margin, y, pageWidth - margin, y)
       y += 6
     }
 
-    function paragraph(text: string, x: number, width: number, size = 9, color = muted) {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(size)
-      setText(color)
-      const lines = doc.splitTextToSize(text, width)
-      doc.text(lines, x, y)
-      y += lines.length * 4.8
+    function paragraph(text: string, x: number, width: number, size = 9, color: [number, number, number] = muted) {
+      const lines = wrapThaiText(text, width, size, false)
+      const lh = lineHeightMm()
+      drawThaiTextLines(doc, lines, x, y, lh, { fontSize: size, color })
+      y += lines.length * lh
     }
 
     function card(x: number, top: number, width: number, height: number) {
@@ -294,16 +294,10 @@ export default function OutputPage() {
     }
 
     function keyValue(label: string, detail: string, x: number, top: number, width: number) {
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'bold')
-      setText(muted)
-      doc.text(label.toUpperCase(), x, top)
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'bold')
-      setText(ink)
-      const lines = doc.splitTextToSize(detail, width)
-      doc.text(lines, x, top + 5)
-      return 8 + lines.length * 4
+      drawThaiText(doc, label.toUpperCase(), x, top, { fontSize: 8, bold: true, color: muted })
+      const lines = wrapThaiText(detail, width, 9, false)
+      const lh = lineHeightMm()
+      drawThaiTextLines(doc, lines, x, top + 5, lh, { fontSize: 9, bold: true, color: ink })
     }
 
     function table(headers: string[], rows: string[][], widths: number[]) {
@@ -313,12 +307,10 @@ export default function OutputPage() {
       doc.setFillColor(warm[0], warm[1], warm[2])
       doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2])
       doc.rect(startX, y, contentWidth, headerHeight, 'FD')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(8.5)
-      setText(ink)
+
       let x = startX
       headers.forEach((header, index) => {
-        doc.text(header, x + 2, y + 5.8)
+        drawThaiText(doc, header, x + 3, y + 5.8, { fontSize: 8.5, bold: true, color: ink })
         x += widths[index]
       })
       y += headerHeight
@@ -328,23 +320,24 @@ export default function OutputPage() {
       }
 
       rows.forEach((row, rowIndex) => {
-        const wrapped = row.map((cell, index) => doc.splitTextToSize(value(cell, '-'), widths[index] - 4))
-        const rowHeight = Math.max(10, ...wrapped.map((lines) => lines.length * 4 + 5))
+        const wrapped = row.map((cell, index) => wrapThaiText(value(cell, '-'), widths[index] - 6, 8.5, false))
+        const lh = lineHeightMm()
+        const rowHeight = Math.max(9, ...wrapped.map((lines) => lines.length * lh + 4.5))
         addPageIfNeeded(rowHeight + 4)
+
         if (rowIndex % 2 === 0) {
           doc.setFillColor(255, 255, 255)
         } else {
           doc.setFillColor(252, 250, 247)
         }
+
         doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2])
         doc.rect(startX, y, contentWidth, rowHeight, 'FD')
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(8.5)
-        setText(muted)
-        x = startX
+
+        let cellX = startX
         wrapped.forEach((lines, index) => {
-          doc.text(lines, x + 2, y + 5.2)
-          x += widths[index]
+          drawThaiTextLines(doc, lines, cellX + 3, y + 5.5, lh, { fontSize: 8.5, color: muted })
+          cellX += widths[index]
         })
         y += rowHeight
       })
@@ -356,39 +349,33 @@ export default function OutputPage() {
       doc.rect(0, 0, pageWidth, 42, 'F')
       doc.setFillColor(orange[0], orange[1], orange[2])
       doc.roundedRect(margin, 12, 16, 16, 3, 3, 'F')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(11)
-      doc.setTextColor(255, 255, 255)
-      doc.text('AI', margin + 8, 22, { align: 'center' })
-      doc.setFontSize(19)
-      setText(ink)
-      doc.text(project.title, margin + 22, 18)
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      setText(muted)
-      doc.text('Ethical Monetization Designer - AI Recommended PDF', margin + 22, 25)
-      doc.text(`Export date: ${exportDate}`, pageWidth - margin, 18, { align: 'right' })
-      doc.text(`Risk: ${riskLabel} (${riskScore}/10)`, pageWidth - margin, 25, { align: 'right' })
-      y = 52
+      drawThaiText(doc, 'AI', margin + 8, 20.5, { fontSize: 12, bold: true, color: [255, 255, 255], align: 'center', baseline: 'middle' })
+      drawThaiText(doc, project.title, margin + 22, 18, { fontSize: 19, bold: true, color: ink })
+      drawThaiText(doc, 'Ethical Monetization Designer - AI Recommended PDF', margin + 22, 24, { fontSize: 9, color: muted })
+      drawThaiText(doc, `Export date: ${exportDate}`, pageWidth - margin, 18, { fontSize: 9, color: muted, align: 'right' })
+      drawThaiText(doc, `Risk: ${riskLabel} (${riskScore}/10)`, pageWidth - margin, 24, { fontSize: 9, color: muted, align: 'right' })
+      y = 50
 
-      card(margin, y, contentWidth, 34)
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      setText(ink)
-      doc.text('AI Recommendation Summary', margin + 5, y + 9)
-      y += 18
-      paragraph(
-        riskScore >= 7
-          ? 'The plan can become stronger by reducing pressure before final review. Prioritize caps, clear purchase value, and fewer interruption points.'
-          : 'The plan is close to review-ready. Use the pitch to show how the design protects player choice while still supporting revenue.',
-        margin + 5,
-        contentWidth - 10,
-        9
-      )
-      y += 8
+      const aiSummaryText = riskScore >= 7
+        ? 'The plan can become stronger by reducing pressure before final review. Prioritize caps, clear purchase value, and fewer interruption points.'
+        : 'The plan is close to review-ready. Use the pitch to show how the design protects player choice while still supporting revenue.'
+
+      const aiSummaryLines = wrapThaiText(aiSummaryText, contentWidth - 10, 9, false)
+      const aiCardHeight = 16 + aiSummaryLines.length * lineHeightMm()
+
+      card(margin, y, contentWidth, aiCardHeight)
+      drawThaiText(doc, 'AI Recommendation Summary', margin + 5, y + 9, { fontSize: 14, bold: true, color: ink })
+      const oldY = y
+      y += 15
+      paragraph(aiSummaryText, margin + 5, contentWidth - 10, 9)
+      y = oldY + aiCardHeight + 8
 
       title('Recommended Fixes')
-      table(['Area', 'Priority', 'AI recommendation'], aiSuggestions, [38, 34, 100])
+      table(
+        ['Category', 'AI Recommendation'],
+        aiSuggestions.length > 0 ? aiSuggestions : [['ยังไม่มีคำแนะนำ', 'คุยกับผู้ช่วย AI แล้วกดสรุปคำแนะนำก่อน export PDF']],
+        [40, 142],
+      )
 
       title('Suggested Pitch')
       paragraph(
@@ -414,7 +401,7 @@ export default function OutputPage() {
           ['Unclear IAP benefit', `${vagueItems}`],
           ['Missing IAP price', `${unpricedItems}`],
         ],
-        [62, 110]
+        [62, 120]
       )
 
       title('Final Checklist')
@@ -426,7 +413,7 @@ export default function OutputPage() {
           ['Price clarity', 'Every paid item has a visible price and a concrete benefit.'],
           ['Pitch evidence', 'The final pitch names caps, optionality, and clear value as ethics evidence.'],
         ],
-        [52, 120]
+        [52, 130]
       )
 
       footer()
@@ -434,65 +421,60 @@ export default function OutputPage() {
       return
     }
 
+    // ================= DATA MODE ================= //
     doc.setFillColor(warm[0], warm[1], warm[2])
-    doc.rect(0, 0, pageWidth, 38, 'F')
+    doc.rect(0, 0, pageWidth, 42, 'F')
     doc.setFillColor(orange[0], orange[1], orange[2])
     doc.roundedRect(margin, 12, 16, 16, 3, 3, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.setTextColor(255, 255, 255)
-    doc.text('EMD', margin + 8, 22, { align: 'center' })
-    doc.setFontSize(19)
-    setText(ink)
-    doc.text(project.title, margin + 22, 18)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    setText(muted)
-    doc.text('Ethical Monetization Designer - Your Data PDF', margin + 22, 25)
-    doc.text(`Export date: ${exportDate}`, pageWidth - margin, 18, { align: 'right' })
-    doc.text(`Status: ${project.status.replace('_', ' ')}`, pageWidth - margin, 25, { align: 'right' })
-    y = 48
+    drawThaiText(doc, 'EMD', margin + 8, 20.5, { fontSize: 10, bold: true, color: [255, 255, 255], align: 'center', baseline: 'middle' })
+    drawThaiText(doc, project.title, margin + 22, 18, { fontSize: 19, bold: true, color: ink })
+    drawThaiText(doc, 'Ethical Monetization Designer - Your Data PDF', margin + 22, 24, { fontSize: 9, color: muted })
+    drawThaiText(doc, `Export date: ${exportDate}`, pageWidth - margin, 18, { fontSize: 9, color: muted, align: 'right' })
+    drawThaiText(doc, `Status: ${project.status.replace('_', ' ')}`, pageWidth - margin, 24, { fontSize: 9, color: muted, align: 'right' })
+    y = 50
 
-    card(margin, y, 118, 50)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(15)
-    setText(ink)
-    doc.text('Summary', margin + 5, y + 9)
-    const summaryTop = y + 18
-    const summary = `${project.title} is a ${list(project.platform)} ${list(project.genre)} game for ${value(project.target_audience, 'a defined audience')}. The monetization approach uses ${adPlacements.length} ad placement(s) and ${iapItems.length} in-app purchase item(s), with a focus on optional value, clear player benefit, and pressure control.`
-    y = summaryTop
-    paragraph(summary, margin + 5, 108, 9)
+    const summaryText = `${project.title} is a ${list(project.platform)} ${list(project.genre)} game for ${value(project.target_audience, 'a defined audience')}. The monetization approach uses ${adPlacements.length} ad placement(s) and ${iapItems.length} in-app purchase item(s), with a focus on optional value, clear player benefit, and pressure control.`
+    const summaryLines = wrapThaiText(summaryText, 108, 9, false)
+    const lh = lineHeightMm()
+    const summaryCardHeight = Math.max(50, 18 + summaryLines.length * lh)
 
-    y = 48
-    card(138, y, 58, 50)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(13)
-    setText(ink)
-    doc.text('Revenue Mix', 143, y + 9)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`Ads ${pdfAdPercent}%`, 143, y + 22)
-    doc.text(`IAP ${pdfIapPercent}%`, 174, y + 22)
+    card(margin, y, 118, summaryCardHeight)
+    drawThaiText(doc, 'Summary', margin + 5, y + 9, { fontSize: 15, bold: true, color: ink })
+    const oldY = y
+    y += 15
+    paragraph(summaryText, margin + 5, 108, 9)
+
+    y = oldY
+    card(138, y, 58, summaryCardHeight)
+    drawThaiText(doc, 'Revenue Mix', 143, y + 9, { fontSize: 13, bold: true, color: ink })
+    drawThaiText(doc, `Ads ${pdfAdPercent}%`, 143, y + 22, { fontSize: 9, bold: true, color: ink })
+    drawThaiText(doc, `IAP ${pdfIapPercent}%`, 191, y + 22, { fontSize: 9, bold: true, color: ink, align: 'right' })
     doc.setFillColor(236, 231, 224)
-    doc.roundedRect(143, y + 28, 46, 5, 2, 2, 'F')
+    doc.roundedRect(143, y + 26, 48, 5, 2, 2, 'F')
     doc.setFillColor(orange[0], orange[1], orange[2])
-    doc.roundedRect(143, y + 28, Math.max(2, 46 * pdfAdPercent / 100), 5, 2, 2, 'F')
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8.5)
-    setText(muted)
-    doc.text(`Risk score: ${riskLabel} (${riskScore}/10)`, 143, y + 40)
-    doc.text(`Store: ${value(iapConfig?.store?.replace('_', ' '), 'Not configured')}`, 143, y + 45)
+    doc.roundedRect(143, y + 26, Math.max(2, 48 * pdfAdPercent / 100), 5, 2, 2, 'F')
+    drawThaiText(doc, `Risk score: ${riskLabel} (${riskScore}/10)`, 143, y + 38, { fontSize: 8.5, color: muted })
+    drawThaiText(doc, `Store: ${value(iapConfig?.store?.replace('_', ' '), 'Not configured')}`, 143, y + 43, { fontSize: 8.5, color: muted })
 
-    y = 108
+    y = oldY + summaryCardHeight + 10
     title('Project Context')
+
+    const contextColW = [40, 50, 52, 40]
+    const contextColX = [margin + 5, margin + 5 + 40, margin + 5 + 40 + 50, margin + 5 + 40 + 50 + 52]
+    const lc1 = wrapThaiText(list(project.genre), contextColW[0] - 6, 9, false).length
+    const lc2 = wrapThaiText(list(project.platform), contextColW[1] - 6, 9, false).length
+    const lc3 = wrapThaiText(value(project.target_audience), contextColW[2] - 6, 9, false).length
+    const lc4 = wrapThaiText(value(project.session_length), contextColW[3] - 6, 9, false).length
+    const contextCardHeight = Math.max(30, 16 + Math.max(lc1, lc2, lc3, lc4) * lh)
+
     const contextTop = y
-    card(margin, contextTop, contentWidth, 36)
-    const col = contentWidth / 4
-    keyValue('Genre', list(project.genre), margin + 5, contextTop + 9, col - 10)
-    keyValue('Platform', list(project.platform), margin + col + 5, contextTop + 9, col - 10)
-    keyValue('Audience', value(project.target_audience), margin + col * 2 + 5, contextTop + 9, col - 10)
-    keyValue('Session', value(project.session_length), margin + col * 3 + 5, contextTop + 9, col - 10)
-    y = contextTop + 45
+    card(margin, contextTop, contentWidth, contextCardHeight)
+    keyValue('Genre', list(project.genre), contextColX[0], contextTop + 9, contextColW[0] - 6)
+    keyValue('Platform', list(project.platform), contextColX[1], contextTop + 9, contextColW[1] - 6)
+    keyValue('Audience', value(project.target_audience), contextColX[2], contextTop + 9, contextColW[2] - 6)
+    keyValue('Session', value(project.session_length), contextColX[3], contextTop + 9, contextColW[3] - 6)
+
+    y = contextTop + contextCardHeight + 8
     title('Core Loop')
     paragraph(value(project.core_mechanic, 'No core loop has been described yet.'), margin, contentWidth, 10)
     y += 5
@@ -501,21 +483,22 @@ export default function OutputPage() {
     const flowTop = y
     const stages = ['Entry', 'Gameplay', 'Outcome', 'Meta']
     stages.forEach((stage, index) => {
-      const x = margin + index * 45
+      const cx = margin + 18 + (index * 48.6)
+      const cy = flowTop + 10
+
       doc.setFillColor(255, 255, 255)
       doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2])
-      doc.circle(x + 10, flowTop + 10, 8, 'FD')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(10)
-      setText(orange)
-      doc.text(String(index + 1), x + 10, flowTop + 13, { align: 'center' })
-      setText(ink)
-      doc.text(stage, x + 2, flowTop + 25)
+      doc.circle(cx, cy, 8, 'FD')
+
+      drawThaiText(doc, String(index + 1), cx, cy, { fontSize: 10, bold: true, color: orange, align: 'center', baseline: 'middle' })
+      drawThaiText(doc, stage, cx, cy + 16, { fontSize: 10, color: ink, align: 'center' })
+
       if (index < stages.length - 1) {
+        const nextCx = margin + 18 + ((index + 1) * 48.6)
         doc.setDrawColor(orange[0], orange[1], orange[2])
-        doc.line(x + 22, flowTop + 10, x + 39, flowTop + 10)
-        doc.line(x + 36, flowTop + 7, x + 39, flowTop + 10)
-        doc.line(x + 36, flowTop + 13, x + 39, flowTop + 10)
+        doc.line(cx + 12, cy, nextCx - 14, cy)
+        doc.line(nextCx - 17, cy - 2.5, nextCx - 14, cy)
+        doc.line(nextCx - 17, cy + 2.5, nextCx - 14, cy)
       }
     })
     y = flowTop + 34
@@ -529,7 +512,7 @@ export default function OutputPage() {
         placement.frequency_cap == null ? 'Missing' : `${placement.frequency_cap} per session`,
         value(placement.notes, 'No notes'),
       ]),
-      [34, 64, 35, 39]
+      [30, 62, 35, 55]
     )
 
     title('IAP Catalog')
@@ -541,7 +524,7 @@ export default function OutputPage() {
         money(item.price_usd),
         value(item.description, 'No benefit described'),
       ]),
-      [42, 38, 28, 64]
+      [40, 32, 25, 85]
     )
 
     title('Configuration Notes')
@@ -555,7 +538,7 @@ export default function OutputPage() {
         ['IAP', 'Currency', value(iapConfig?.currency)],
         ['IAP', 'Notes', value(iapConfig?.notes, 'No notes')],
       ],
-      [32, 45, 95]
+      [30, 50, 102]
     )
 
     title('Case for Ethics')
@@ -565,7 +548,7 @@ export default function OutputPage() {
       ['Price clarity', iapItems.every((item) => item.price_usd != null && item.description) ? 'Pass' : 'Needs review', 'Every paid item should show price and benefit clearly.'],
       ['Pressure level', riskLabel, 'Interstitials and missing caps increase pressure risk.'],
     ]
-    table(['Check', 'Result', 'Explanation'], ethicsRows, [42, 38, 92])
+    table(['Check', 'Result', 'Explanation'], ethicsRows, [40, 32, 110])
 
     title('Instructor Review')
     table(
@@ -575,9 +558,8 @@ export default function OutputPage() {
         ['Comment', value(project.instructor_comment, 'No instructor comment yet')],
         ['Submitted at', value(project.submitted_at, 'Not submitted')],
         ['Graded at', value(project.graded_at, 'Not graded')],
-        ['Last updated', value(project.updated_at)],
       ],
-      [42, 130]
+      [50, 132]
     )
 
     footer()
@@ -706,6 +688,8 @@ export default function OutputPage() {
               </div>
             </div>
           </Card>
+
+          <AiSuggestionPanel stage="output" projectId={projectId ?? ''} />
 
           <Card>
             <h2 className="font-black text-slate-950">Case for Ethics</h2>

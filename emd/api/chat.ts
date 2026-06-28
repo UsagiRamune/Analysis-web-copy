@@ -1,9 +1,4 @@
-import { GoogleGenAI } from '@google/genai'
- 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
- 
-// ── สลับ model ตรงนี้เพื่อเทสเทียบ ──
-const MODEL = 'gemini-2.5-flash'
+import { getProvider } from './lib/ai-provider'
  
 const SYSTEM_PROMPT = `คุณคือผู้ช่วยที่ปรึกษาด้านการออกแบบเกม (Game Design Advisor)
 สำหรับนักศึกษาที่กำลังเขียน Game Design Document (GDD)
@@ -12,6 +7,8 @@ const SYSTEM_PROMPT = `คุณคือผู้ช่วยที่ปรึ
 - ให้คำแนะนำเชิง guide เท่านั้น ห้ามเขียน GDD แทนนักศึกษาทั้งหมด
 - ชวนให้นักศึกษาคิดต่อด้วยคำถาม ไม่ใช่ป้อนคำตอบสำเร็จรูป
 - ชี้จุดที่ควรปรับปรุงและจุดที่ทำได้ดีแล้ว โดยอ้างอิงจากข้อมูลเกมที่ให้มา
+- เวลาพูดเรื่อง revenue mix (สัดส่วน Ads/IAP) ให้ตอบแบบฟันธงสั้น ๆ ว่าควรเน้นด้านไหนมากกว่า
+  พร้อมเหตุผลอ้างอิงจาก genre/core loop/target audience ที่ให้มา ไม่ต้องอธิบายยืดยาว
  
 ขอบเขต: ตอบเฉพาะเรื่อง game design, monetization, ethics ของเกมเท่านั้น
 ถ้าผู้ใช้ถามนอกเรื่อง ให้ดึงกลับมาเรื่องการออกแบบเกมอย่างสุภาพ
@@ -32,8 +29,14 @@ const SUMMARIZE_PROMPT = `คุณคือผู้ช่วยสรุปค
 - "target_audience" = กลุ่มเป้าหมาย
 - "core_mechanic" = core loop / กลไกหลัก
 - "session_length" = ความยาว session
+- "revenue_mix" = สัดส่วนรายได้ระหว่าง Ads กับ IAP ว่าควรเน้นด้านไหนมากกว่าและทำไม
+- "monetization_design" = การออกแบบ ads placement หรือ IAP item โดยรวม (ไม่ใช่เรื่องสัดส่วน)
  
-กติกา:
+กติกาเฉพาะหมวด "revenue_mix": เขียนให้สั้นและฟันธง ตามรูปแบบ
+"Ads ควรมากกว่า/น้อยกว่า IAP เพราะ <เหตุผลอ้างอิง core loop หรือ genre หรือ target audience>"
+ไม่ต้องอธิบายยืดยาว ประโยคเดียวพอ
+ 
+กติกาทั่วไป:
 - ตอบเป็น JSON array เท่านั้น ห้ามมีข้อความอื่นนอก array ห้ามมี markdown code fence
 - แต่ละ element มีรูปแบบ: {"category": "<หมวด>", "advice": "<คำแนะนำกระชับ 1 ประโยค ภาษาทางการ ภาษาไทย>"}
 - เลือก category ที่ตรงที่สุดกับคำแนะนำข้อนั้น
@@ -42,7 +45,7 @@ const SUMMARIZE_PROMPT = `คุณคือผู้ช่วยสรุปค
 - **ถ้าบทสนทนายังไม่มีคำแนะนำที่เป็นรูปธรรม ให้ตอบ array ว่าง [] เท่านั้น**
  
 ตัวอย่างผลลัพธ์:
-[{"category":"core_mechanic","advice":"ควรอธิบาย core loop เป็นลำดับขั้นให้ชัดเจน"},{"category":"session_length","advice":"session ต่ำกว่า 5 นาทีเหมาะกับเกม casual บนมือถือ"}]`
+[{"category":"revenue_mix","advice":"Ads ควรมากกว่า IAP เพราะเกมแนว casual ที่ session สั้น ผู้เล่นมักไม่อยากจ่ายเงินก้อนใหญ่"},{"category":"core_mechanic","advice":"ควรอธิบาย core loop เป็นลำดับขั้นให้ชัดเจน"}]`
  
 // แปลง step number เป็นชื่อ เพื่อบอก AI ว่า user อยู่ตรงไหน
 const STEP_NAMES: Record<number, string> = {
@@ -94,50 +97,24 @@ function buildContextText(p: any): string {
     }
   }
  
-  return text
-}
- 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
- 
-async function generateWithRetry(
-  contents: any,
-  systemInstruction: string,
-  opts: { maxOutputTokens?: number; temperature?: number } = {},
-  maxRetries = 3,
-): Promise<any> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await ai.models.generateContent({
-        model: MODEL,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: opts.temperature ?? 0.7,
-          maxOutputTokens: opts.maxOutputTokens ?? 1500,
-        },
-      })
-    } catch (err: any) {
-      if (err?.status === 503 && attempt < maxRetries) {
-        await sleep(500 * Math.pow(2, attempt))
-        continue
-      }
-      throw err
-    }
+  // เพิ่ม revenue mix target ถ้ามี (จาก slider ใน BuildPage)
+  if (p?.revenueMixTarget != null) {
+    text += `\n\nสัดส่วนรายได้ที่ตั้งใจไว้: Ads ${p.revenueMixTarget}% / IAP ${100 - p.revenueMixTarget}%`
   }
+ 
+  return text
 }
  
 // ── parse JSON จาก AI ให้เป็น array ที่ปลอดภัย ──
 // กัน AI ตอบมาพร้อม markdown fence, ข้อความเกิน, หรือ JSON พัง
-// หมวดที่ยอมรับ — ต้องตรงกับ field ใน GDD
 const VALID_CATEGORIES = [
-  'title', 'genre', 'platform', 'target_audience', 'core_mechanic', 'session_length',
+  'title', 'genre', 'platform', 'target_audience', 'core_mechanic',
+  'session_length', 'revenue_mix', 'monetization_design',
 ]
  
 function parseSuggestions(raw: string): Array<{ category: string; advice: string }> {
   if (!raw) return []
-  // ตัด markdown fence ถ้ามี (```json ... ```)
   let text = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-  // หาช่วง [ ... ] เผื่อ AI พ่นข้อความนำหน้า
   const start = text.indexOf('[')
   const end = text.lastIndexOf(']')
   if (start === -1 || end === -1 || end < start) return []
@@ -168,11 +145,12 @@ export default async function handler(req: any, res: any) {
   }
  
   try {
-    const { project, history = [], message, mode } = req.body
+    const { project, history = [], message, mode, provider: providerOverride } = req.body
     if (!message) {
       return res.status(400).json({ error: 'message is required' })
     }
  
+    const provider = await getProvider(providerOverride)
     const trimmedHistory = history.slice(-8)
  
     // ── โหมดสรุป: สกัดคำแนะนำเป็น JSON array (category + advice) ──
@@ -181,20 +159,33 @@ export default async function handler(req: any, res: any) {
         ...trimmedHistory,
         { role: 'user', parts: [{ text: message }] },
       ]
-      // temperature ต่ำ + token พอประมาณ เพื่อให้ JSON เสถียร
-      const response = await generateWithRetry(
-        summarizeContents,
-        SUMMARIZE_PROMPT,
-        { temperature: 0.3, maxOutputTokens: 1000 },
-      )
+      let result = await provider.generate({
+        contents: summarizeContents,
+        systemInstruction: SUMMARIZE_PROMPT,
+        temperature: 0.3,
+        maxOutputTokens: 1000,
+      })
  
-      // parse JSON ที่ AI ตอบ — กัน markdown fence + ข้อความแปลกปลอม
-      const suggestions = parseSuggestions(response.text)
+      let suggestions = parseSuggestions(result.text)
+ 
+      // เคส "parse ไม่ออกทั้งที่ AI ไม่ได้ตอบ [] จริง" = format เพี้ยน (เจอบ่อยกับโมเดล
+      // ที่ไม่แข็งภาษาไทย เช่น Owl Alpha) — ลองสรุปใหม่อีก 1 ครั้ง แทนที่จะปล่อยว่างเงียบ ๆ
+      const looksEmpty = result.text.trim() === '[]' || result.text.trim() === ''
+      if (suggestions.length === 0 && !looksEmpty) {
+        console.warn(`[chat] summarize parse ล้มเหลวจาก ${result.providerName} — retry 1 ครั้ง. raw: ${result.text.slice(0, 200)}`)
+        result = await provider.generate({
+          contents: summarizeContents,
+          systemInstruction: SUMMARIZE_PROMPT + '\n\nย้ำ: ตอบเป็น JSON array เท่านั้น ห้ามมีคำอธิบายอื่นปนมา',
+          temperature: 0.2,
+          maxOutputTokens: 1000,
+        })
+        suggestions = parseSuggestions(result.text)
+      }
  
       return res.status(200).json({
-        suggestions,                          // ← array (อาจว่าง = ไม่มีอะไรสรุป)
-        usage: response.usageMetadata ?? null,
-        model: MODEL,
+        suggestions,
+        usage: result.usage,
+        provider: result.providerName,
       })
     }
  
@@ -206,20 +197,30 @@ export default async function handler(req: any, res: any) {
       { role: 'user', parts: [{ text: message }] },
     ]
  
-    const response = await generateWithRetry(
+    const result = await provider.generate({
       contents,
-      SYSTEM_PROMPT,
-      { temperature: 0.7, maxOutputTokens: 1500 },
-    )
+      systemInstruction: SYSTEM_PROMPT,
+      temperature: 0.7,
+      maxOutputTokens: 1500,
+    })
  
     return res.status(200).json({
-      reply: response.text,
-      usage: response.usageMetadata ?? null,
-      model: MODEL,
+      reply: result.text,
+      usage: result.usage,
+      provider: result.providerName,
     })
   } catch (err: any) {
     console.error('[chat] error:', err?.message)
-    if (err?.status === 503) {
+    const msg = String(err?.message)
+    const is429 = err?.status === 429 || /429/.test(msg) || /RESOURCE_EXHAUSTED/.test(msg)
+    const is503 = err?.status === 503 || /503/.test(msg)
+ 
+    if (is429) {
+      return res.status(429).json({
+        error: 'โควต้า AI ของวันนี้หมดแล้ว (free tier มีจำกัดจำนวนครั้ง/วัน) ลองใหม่พรุ่งนี้ หรือสลับ provider ใน .env',
+      })
+    }
+    if (is503) {
       return res.status(503).json({ error: 'AI กำลังมีคนใช้เยอะ ลองใหม่อีกครั้งในสักครู่' })
     }
     return res.status(500).json({ error: 'AI ตอบไม่ได้ตอนนี้ ลองใหม่อีกครั้ง' })

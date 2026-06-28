@@ -32,6 +32,8 @@ interface ChatContextValue {
   // -- คำแนะนำสรุป (panel) --
   suggestions: Suggestion[]
   addSuggestions: (items: Array<{ category: string; advice: string }>) => void
+  // โหลดของเก่าจาก DB มาแทนทั้งหมด — ไม่ trigger notification (ไม่ใช่ของใหม่)
+  setSuggestionsFromDb: (items: Array<{ category: string; advice: string }>) => void
   clearSuggestions: () => void
  
   // -- สถานะ UI --
@@ -76,6 +78,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [],
   )
  
+  // โหลด suggestion เก่าจาก DB มาแทนทั้งหมด (ตอนเปิดหน้า)
+  // ใช้ isFromDb=true ฝัง flag ไว้ใน id เพื่อให้ panel แยกได้ว่าไม่ใช่ของใหม่
+  const setSuggestionsFromDb = useCallback(
+    (items: Array<{ category: string; advice: string }>) => {
+      setSuggestions(
+        items.map((item, i) => ({
+          id: `sg_db_${i}`,
+          category: item.category,
+          advice: item.advice,
+          createdAt: 0, // createdAt=0 บอกว่าเป็นของเก่าจาก DB ไม่ใช่ของใหม่จากแชต
+        })),
+      )
+    },
+    [],
+  )
+ 
   const clearSuggestions = useCallback(() => {
     setSuggestions([])
   }, [])
@@ -88,6 +106,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setLiveDraft,
     suggestions,
     addSuggestions,
+    setSuggestionsFromDb,
     clearSuggestions,
     isChatOpen,
     setChatOpen,

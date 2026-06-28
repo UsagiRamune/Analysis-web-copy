@@ -20,6 +20,7 @@ import Card from '../../../shared/components/Card'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
+import AiSuggestionPanel from './components/AiSuggestionPanel'
 
 const PLACEMENT_TYPES: Array<'rewarded' | 'interstitial' | 'banner' | 'native'> = ['rewarded', 'interstitial', 'banner', 'native']
 const IAP_ITEM_TYPES: Array<'consumable' | 'non_consumable' | 'subscription'> = ['consumable', 'non_consumable', 'subscription']
@@ -458,6 +459,8 @@ export default function BuildPage() {
             </div>
             <p className={`mt-3 text-sm font-black ${fairness.color}`}>Fairness Level: {fairness.label}</p>
           </Card>
+
+          <AiSuggestionPanel stage="build" projectId={projectId ?? ''} />
 
           <div className="sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button onClick={() => navigate(`/project/${projectId}/setup`)} className="rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">

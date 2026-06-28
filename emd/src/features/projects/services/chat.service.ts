@@ -5,6 +5,7 @@ import {
   getIapConfig,
   listIapItems,
 } from './projects.service'
+import { supabase } from '../../../lib/supabase'
  
 // รูปแบบ 1 ข้อความใน chat (ฝั่ง frontend)
 export interface ChatMessage {
@@ -122,14 +123,15 @@ export async function sendChatMessage(params: {
   message: string
   history: ChatMessage[]
   liveDraft?: Partial<GddContext> | null
-}): Promise<{ reply: string; usage: unknown }> {
+  providerOverride?: string | null   // ใช้ตอนปุ่มสลับฝั่ง dev เลือก provider เอง
+}): Promise<{ reply: string; usage: unknown; provider: string }> {
   // 1. หา context: มี liveDraft ใช้เลย, ไม่มีดึงจาก DB
   const context: GddContext = params.liveDraft
     ? normalizeDraft(params.liveDraft)
     : await buildGddContext(params.projectId)
  
-  // 2. แปลง history เป็นรูปแบบที่ Gemini ต้องการ (role + parts)
-  const geminiHistory = params.history.map((m) => ({
+  // 2. แปลง history เป็นรูปแบบกลาง (role + parts) — backend แปลงต่อตาม provider ที่ใช้จริง
+  const providerHistory = params.history.map((m) => ({
     role: m.role,
     parts: [{ text: m.text }],
   }))
@@ -140,8 +142,9 @@ export async function sendChatMessage(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       project: context,
-      history: geminiHistory,
+      history: providerHistory,
       message: params.message,
+      ...(params.providerOverride ? { provider: params.providerOverride } : {}),
     }),
   })
  
@@ -151,7 +154,11 @@ export async function sendChatMessage(params: {
   }
  
   const data = await res.json()
-  return { reply: data.reply, usage: data.usage }
+  return {
+    reply: data.reply,
+    usage: data.usage,
+    provider: typeof data.provider === 'string' ? data.provider : 'unknown',
+  }
 }
  
 // ── สรุปบทสนทนาเป็น "คำแนะนำมีหมวด" สำหรับ SuggestionPanel ──
@@ -165,8 +172,9 @@ export interface RawSuggestion {
  
 export async function summarizeChat(params: {
   history: ChatMessage[]
-}): Promise<{ suggestions: RawSuggestion[] }> {
-  const geminiHistory = params.history.map((m) => ({
+  providerOverride?: string | null   // ใช้ตอนปุ่มสลับฝั่ง dev เลือก provider เอง
+}): Promise<{ suggestions: RawSuggestion[]; provider: string }> {
+  const providerHistory = params.history.map((m) => ({
     role: m.role,
     parts: [{ text: m.text }],
   }))
@@ -176,8 +184,9 @@ export async function summarizeChat(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       mode: 'summarize',
-      history: geminiHistory,
+      history: providerHistory,
       message: 'สรุปคำแนะนำจากบทสนทนาข้างต้นเป็น JSON array ตามรูปแบบที่กำหนด',
+      ...(params.providerOverride ? { provider: params.providerOverride } : {}),
     }),
   })
  
@@ -187,5 +196,51 @@ export async function summarizeChat(params: {
   }
  
   const data = await res.json()
-  return { suggestions: Array.isArray(data.suggestions) ? data.suggestions : [] }
+  return {
+    suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+    provider: typeof data.provider === 'string' ? data.provider : 'unknown',
+  }
+}
+ 
+// ── บันทึก suggestion ที่สรุปแล้วลง Supabase (ตาราง ai_suggestions) ──
+// เรียกตอน user กดปุ่ม "สรุปเป็นคำแนะนำ" และ AI คืนผลมาแล้ว
+// model = ระบุว่ามาจาก provider ไหน (เผื่อเทียบ Gemini vs Owl Alpha)
+export async function saveSuggestions(params: {
+  projectId: string
+  suggestions: RawSuggestion[]
+  model?: string
+}): Promise<void> {
+  if (params.suggestions.length === 0) return // ไม่มีอะไรให้บันทึก
+ 
+  const rows = params.suggestions.map((s) => ({
+    project_id: params.projectId,
+    category: s.category,
+    advice: s.advice,
+    model_used: params.model ?? null,
+  }))
+ 
+  // หมายเหตุ: cast เป็น any เฉพาะจุดนี้ เพราะ supabase client ไม่มี type ของตาราง
+  // ai_suggestions ผูกไว้ (database.types.ts generate ก่อนตารางนี้ถูกสร้าง)
+  // ถ้า regenerate types จาก Supabase แล้ว ลบ "as any" นี้ออกได้เลย — type จะตรวจสอบเองถูกต้อง
+  const { error } = await supabase.from('ai_suggestions').insert(rows as any)
+  if (error) {
+    throw new Error(`บันทึกคำแนะนำไม่สำเร็จ: ${error.message}`)
+  }
+}
+ 
+// ── โหลด suggestion ทั้งหมดของ project (ตอนเปิดหน้า — persistent) ──
+// เรียงใหม่สุดก่อน (created_at desc)
+export async function loadSuggestions(
+  projectId: string,
+): Promise<RawSuggestion[]> {
+  const { data, error } = await supabase
+    .from('ai_suggestions')
+    .select('category, advice')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+ 
+  if (error) {
+    throw new Error(`โหลดคำแนะนำไม่สำเร็จ: ${error.message}`)
+  }
+  return data ?? []
 }

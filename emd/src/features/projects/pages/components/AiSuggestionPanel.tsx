@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChat } from '../../context/ChatContext'
+import { loadSuggestions } from '../../services/chat.service'
  
 type Stage = 'setup' | 'build' | 'guardrail' | 'output'
  
 interface AiSuggestionPanelProps {
   stage: Stage
+  projectId: string
 }
  
 // tips เริ่มต้นตาม stage (ของเดิม คงไว้เป็นไกด์เริ่มต้น)
@@ -48,8 +50,25 @@ const categoryLabels: Record<string, string> = {
   session_length: 'ความยาว Session',
 }
  
-export default function AiSuggestionPanel({ stage }: AiSuggestionPanelProps) {
-  const { suggestions } = useChat()
+export default function AiSuggestionPanel({ stage, projectId }: AiSuggestionPanelProps) {
+  const { suggestions, setSuggestionsFromDb } = useChat()
+ 
+  // โหลด suggestion เก่าจาก Supabase ตอนเปิดหน้า (persistent)
+  // ใส่ projectId ว่าง = หน้า /project/new ยังไม่มี project จริง ข้ามการโหลด
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    loadSuggestions(projectId)
+      .then((items) => {
+        if (!cancelled) setSuggestionsFromDb(items)
+      })
+      .catch((err) => {
+        console.error('โหลดคำแนะนำจาก DB ไม่สำเร็จ:', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, setSuggestionsFromDb])
  
   // toggle เปิด/ปิด tips เริ่มต้น (เก็บ localStorage เหมือนเดิม)
   const [tipsEnabled, setTipsEnabled] = useState(() => {
@@ -62,20 +81,21 @@ export default function AiSuggestionPanel({ stage }: AiSuggestionPanelProps) {
   // พับ/กาง panel (default พับ)
   const [expanded, setExpanded] = useState(false)
  
-  // notification เด้งเมื่อมีคำแนะนำ AI ใหม่
+  // notification เด้งเมื่อมีคำแนะนำ AI ใหม่จากแชต (ไม่ใช่ของเก่าที่โหลดจาก DB)
+  // suggestion จาก DB จะมี createdAt=0 (ดู setSuggestionsFromDb ใน ChatContext)
   const [showNotif, setShowNotif] = useState(false)
   const prevCountRef = useRef(suggestions.length)
  
   useEffect(() => {
-    // ถ้าจำนวนคำแนะนำเพิ่มขึ้น = มีอันใหม่ → เด้ง notif
-    if (suggestions.length > prevCountRef.current) {
+    const isNewFromChat = suggestions.length > 0 && suggestions[0].createdAt !== 0
+    if (suggestions.length > prevCountRef.current && isNewFromChat) {
       setShowNotif(true)
       const timer = setTimeout(() => setShowNotif(false), 2500) // เด้ง ~2.5 วิ
       prevCountRef.current = suggestions.length
       return () => clearTimeout(timer)
     }
     prevCountRef.current = suggestions.length
-  }, [suggestions.length])
+  }, [suggestions.length, suggestions])
  
   // คำแนะนำ AI เรียงใหม่สุดอยู่บน
   const aiSuggestions = [...suggestions].reverse()
