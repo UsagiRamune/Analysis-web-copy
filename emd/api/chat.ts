@@ -1,4 +1,4 @@
-import { getProvider } from './lib/ai-provider'
+import { getProvider } from './lib/ai-provider.js'
  
 const SYSTEM_PROMPT = `คุณคือผู้ช่วยที่ปรึกษาด้านการออกแบบเกม (Game Design Advisor)
 สำหรับนักศึกษาที่กำลังเขียน Game Design Document (GDD)

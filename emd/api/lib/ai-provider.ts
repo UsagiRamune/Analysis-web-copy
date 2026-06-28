@@ -35,9 +35,9 @@ export async function getProvider(overrideName?: string): Promise<AiProvider> {
     overrideName && KNOWN_PROVIDERS.includes(overrideName) ? overrideName : getProviderName()
  
   if (name === 'owl-alpha') {
-    const { owlProvider } = await import('./owl-adapter')
+    const { owlProvider } = await import('./owl-adapter.js')
     return owlProvider
   }
-  const { geminiProvider } = await import('./gemini-adapter')
+  const { geminiProvider } = await import('./gemini-adapter.js')
   return geminiProvider
 }

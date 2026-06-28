@@ -1,4 +1,4 @@
-import type { AiProvider, GenerateParams, GenerateResult } from './ai-provider'
+import type { AiProvider, GenerateParams, GenerateResult } from './ai-provider.js'
  
 const MODEL_ID = 'openrouter/owl-alpha'
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
