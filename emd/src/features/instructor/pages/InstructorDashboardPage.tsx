@@ -5,6 +5,7 @@ import { listCourseProjects } from '../../projects/services/projects.service'
 import type { Course, Project, Profile } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 
@@ -105,26 +106,35 @@ export default function InstructorDashboardPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Courses</p>
-          <p className="mt-3 text-4xl font-black text-slate-950">{selectedCourseId === ALL_COURSES ? courses.length : 1}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Active Projects</p>
-          <p className="mt-3 text-4xl font-black text-slate-950">{visibleProjects.length}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Submitted</p>
-          <p className="mt-3 text-4xl font-black text-sky-700">{submitted}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Guardrail Ready</p>
-          <p className="mt-3 text-4xl font-black text-emerald-700">{guardrailReady}</p>
-        </Card>
+        <FadeInCard index={0}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Courses</p>
+            <p className="mt-3 text-4xl font-black text-slate-950">{selectedCourseId === ALL_COURSES ? courses.length : 1}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={1}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Active Projects</p>
+            <p className="mt-3 text-4xl font-black text-slate-950">{visibleProjects.length}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={2}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Submitted</p>
+            <p className="mt-3 text-4xl font-black text-sky-700">{submitted}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={3}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Guardrail Ready</p>
+            <p className="mt-3 text-4xl font-black text-emerald-700">{guardrailReady}</p>
+          </Card>
+        </FadeInCard>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          <FadeInCard index={4}>
           <Card className="overflow-hidden p-0">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <div>
@@ -162,7 +172,9 @@ export default function InstructorDashboardPage() {
               </div>
             )}
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={5}>
           <Card>
             <h2 className="text-lg font-black text-slate-950">My Courses</h2>
             <div className="mt-4 divide-y divide-line">
@@ -179,9 +191,11 @@ export default function InstructorDashboardPage() {
               ))}
             </div>
           </Card>
+          </FadeInCard>
         </div>
 
         <aside className="space-y-4">
+          <FadeInCard index={6}>
           <Card>
             <h2 className="font-black text-slate-950">Popular Topics</h2>
             <div className="mt-4 space-y-3 text-sm">
@@ -198,7 +212,9 @@ export default function InstructorDashboardPage() {
               ))}
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={7}>
           <Card>
             <h2 className="font-black text-slate-950">Users</h2>
             {selectedCourseId === ALL_COURSES ? (
@@ -217,7 +233,9 @@ export default function InstructorDashboardPage() {
               </div>
             )}
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={8}>
           <Card>
             <h2 className="font-black text-slate-950">Review Load</h2>
             <dl className="mt-4 space-y-3 text-sm">
@@ -226,6 +244,7 @@ export default function InstructorDashboardPage() {
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Ready to Review</dt><dd className="font-black">{submitted}</dd></div>
             </dl>
           </Card>
+          </FadeInCard>
         </aside>
       </div>
     </PageContainer>

@@ -22,6 +22,7 @@ import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
+import FadeInCard from '../../../shared/components/FadeInCard'
 
 type PdfExportMode = 'data' | 'ai'
 
@@ -626,6 +627,7 @@ export default function OutputPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          <FadeInCard index={0}>
           <Card>
             <div className="border-b border-line pb-5">
               <p className="text-sm font-bold text-slate-500">Monetization Overview</p>
@@ -647,7 +649,9 @@ export default function OutputPage() {
               ))}
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={1}>
           <Card>
             <h2 className="mb-4 text-xl font-black text-slate-950">Monetization Flow</h2>
             <div className="grid gap-4 md:grid-cols-2">
@@ -667,9 +671,11 @@ export default function OutputPage() {
               ))}
             </div>
           </Card>
+          </FadeInCard>
         </div>
 
         <aside className="space-y-4">
+          <FadeInCard index={0}>
           <Card>
             <h2 className="font-black text-slate-950">Revenue Mix</h2>
             {iapConfig?.store && (
@@ -688,9 +694,13 @@ export default function OutputPage() {
               </div>
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={1}>
           <AiSuggestionPanel stage="output" projectId={projectId ?? ''} />
+          </FadeInCard>
 
+          <FadeInCard index={2}>
           <Card>
             <h2 className="font-black text-slate-950">Case for Ethics</h2>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
@@ -699,7 +709,9 @@ export default function OutputPage() {
               <li>Rewarded ads are presented as player-chosen value exchanges.</li>
             </ul>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={3}>
           <Card>
             <h2 className="font-black text-slate-950">Feedback from Instructor</h2>
             <div className="mt-4">
@@ -712,6 +724,7 @@ export default function OutputPage() {
               )}
             </div>
           </Card>
+          </FadeInCard>
 
           <div className="no-print sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button onClick={() => navigate(`/project/${projectId}/guardrail`)} className="rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">

@@ -14,6 +14,7 @@ import { getProfile } from '../../profile/services/profiles.service'
 import type { Project, AdsConfig, AdPlacement, IapConfig, IapItem, Profile } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 
@@ -209,6 +210,7 @@ export default function InstructorProjectDetailPage() {
       )}
 
       {/* Student Info */}
+      <FadeInCard index={0}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           Student Info
@@ -256,8 +258,10 @@ export default function InstructorProjectDetailPage() {
           </div>
         )}
       </Card>
+      </FadeInCard>
 
       {/* Game Overview (Setup) */}
+      <FadeInCard index={1}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           Game Overview (Setup)
@@ -316,8 +320,10 @@ export default function InstructorProjectDetailPage() {
           </div>
         )}
       </Card>
+      </FadeInCard>
 
       {/* Ads Strategy (Build) */}
+      <FadeInCard index={2}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           Ads Strategy (Build)
@@ -384,8 +390,10 @@ export default function InstructorProjectDetailPage() {
           </>
         )}
       </Card>
+      </FadeInCard>
 
       {/* IAP Catalog (Build) */}
+      <FadeInCard index={3}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           IAP Catalog (Build)
@@ -437,8 +445,10 @@ export default function InstructorProjectDetailPage() {
           </>
         )}
       </Card>
+      </FadeInCard>
 
       {/* Instructor Review Panel */}
+      <FadeInCard index={4}>
       <Card className="border-primary/20">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-1">
           Instructor Review
@@ -588,6 +598,7 @@ export default function InstructorProjectDetailPage() {
           </p>
         )}
       </Card>
+      </FadeInCard>
     </PageContainer>
   )
 }

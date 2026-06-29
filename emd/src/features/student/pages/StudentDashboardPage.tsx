@@ -6,6 +6,7 @@ import { listProjectsByCourseAndOwner } from '../../projects/services/projects.s
 import type { Course, Project } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 
@@ -129,41 +130,52 @@ export default function StudentDashboardPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Active Projects</p>
-          <p className="mt-3 text-4xl font-black text-slate-950">{activeProjects}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Output Ready</p>
-          <p className="mt-3 text-4xl font-black text-emerald-700">{readyProjects}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Submitted</p>
-          <p className="mt-3 text-4xl font-black text-sky-700">{submittedProjects}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold text-slate-500">Courses</p>
-          <p className="mt-3 text-4xl font-black text-slate-950">{visibleCourseData.length}</p>
-        </Card>
+        <FadeInCard index={0}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Active Projects</p>
+            <p className="mt-3 text-4xl font-black text-slate-950">{activeProjects}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={1}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Output Ready</p>
+            <p className="mt-3 text-4xl font-black text-emerald-700">{readyProjects}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={2}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Submitted</p>
+            <p className="mt-3 text-4xl font-black text-sky-700">{submittedProjects}</p>
+          </Card>
+        </FadeInCard>
+        <FadeInCard index={3}>
+          <Card>
+            <p className="text-sm font-semibold text-slate-500">Courses</p>
+            <p className="mt-3 text-4xl font-black text-slate-950">{visibleCourseData.length}</p>
+          </Card>
+        </FadeInCard>
       </div>
 
       {courseData.length === 0 ? (
-        <Card className="text-center">
-          <div className="mx-auto max-w-md py-8">
-            <h2 className="text-xl font-black text-slate-950">No courses yet</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Join a course to start creating monetization plans.
-            </p>
-            <button
-              onClick={() => navigate('/join')}
-              className="mt-6 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:bg-primary-light"
-            >
-              Join a Course
-            </button>
-          </div>
-        </Card>
+        <FadeInCard index={4}>
+          <Card className="text-center">
+            <div className="mx-auto max-w-md py-8">
+              <h2 className="text-xl font-black text-slate-950">No courses yet</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Join a course to start creating monetization plans.
+              </p>
+              <button
+                onClick={() => navigate('/join')}
+                className="mt-6 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:bg-primary-light"
+              >
+                Join a Course
+              </button>
+            </div>
+          </Card>
+        </FadeInCard>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <FadeInCard index={4}>
+          <Card className="overflow-hidden p-0">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div>
               <h2 className="text-lg font-black text-slate-950">Projects</h2>
@@ -234,6 +246,7 @@ export default function StudentDashboardPage() {
             ))}
           </div>
         </Card>
+        </FadeInCard>
       )}
     </PageContainer>
   )

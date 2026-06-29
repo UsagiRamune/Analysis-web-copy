@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useChat } from '../../context/ChatContext'
 import { sendChatMessage, summarizeChat, saveSuggestions, type ChatMessage } from '../../services/chat.service'
  
@@ -133,52 +134,71 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
     }
   }
  
-  // ── ตอนปิด: ปุ่มกลมลอย ──
-  if (!isChatOpen) {
-    return (
-      <button
-        onClick={() => setChatOpen(true)}
-        style={styles.fab}
-        aria-label="เปิดผู้ช่วย AI"
-      >
-        <AiAvatar size={34} />
-      </button>
-    )
-  }
- 
-  // ── ตอนเปิด: กล่องแชต ──
+  // ── render ทั้ง fab และ panel ผ่าน AnimatePresence ──
+  // ใช้ layoutId เดียวกันที่ avatar ทั้ง 2 จุด (fab / header) — framer-motion
+  // จะ track แล้ว animate ตำแหน่ง/ขนาดให้เปลี่ยนอัตโนมัติตอนสลับ (avatar
+  // "เลื่อน" จากกลางปุ่มไปอยู่มุมซ้ายบนของ header) ไม่ต้องคำนวณ x,y เอง
   return (
-    <div style={styles.panel}>
-      <style>{`
-        @keyframes fadeInOut {
-          0% { opacity: 0; transform: translateY(-4px); }
-          10% { opacity: 1; transform: translateY(0); }
-          85% { opacity: 1; }
-          100% { opacity: 0; }
-        }
-      `}</style>
-      {/* header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.avatarRing}>
-            <AiAvatar size={24} />
-          </div>
-          <div>
-            <div style={styles.headerTitleRow}>
-              <span style={styles.headerTitle}>ผู้ช่วยออกแบบเกม</span>
-              {lastProvider && (
-                <span style={styles.providerBadge}>
-                  {lastProvider === 'gemini' ? 'Gemini' : lastProvider === 'owl-alpha' ? 'Owl Alpha' : lastProvider}
-                </span>
-              )}
+    <AnimatePresence mode="wait">
+      {!isChatOpen ? (
+        <motion.button
+          key="fab"
+          onClick={() => setChatOpen(true)}
+          style={styles.fab}
+          aria-label="เปิดผู้ช่วย AI"
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.12 } }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <motion.div layoutId="ai-avatar" transition={{ duration: 0.32, ease: 'easeInOut' }}>
+            <AiAvatar size={34} />
+          </motion.div>
+        </motion.button>
+      ) : (
+        <motion.div
+          key="panel"
+          style={{ ...styles.panel, transformOrigin: 'bottom right' }}
+          initial={{ opacity: 0, scaleY: 0.3, scaleX: 0.85 }}
+          animate={{ opacity: 1, scaleY: 1, scaleX: 1 }}
+          exit={{ opacity: 0, scaleY: 0.3, scaleX: 0.85, transition: { duration: 0.15 } }}
+          transition={{ duration: 0.32, ease: [0.34, 1.56, 0.64, 1] }} // overshoot นิดๆ ให้ดูสนุก ฉับไว
+        >
+          <style>{`
+            @keyframes fadeInOut {
+              0% { opacity: 0; transform: translateY(-4px); }
+              10% { opacity: 1; transform: translateY(0); }
+              85% { opacity: 1; }
+              100% { opacity: 0; }
+            }
+          `}</style>
+          {/* header */}
+          <motion.div
+            style={styles.header}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, delay: 0.08 }}
+          >
+            <div style={styles.headerLeft}>
+              <motion.div layoutId="ai-avatar" style={styles.avatarRing} transition={{ duration: 0.32, ease: 'easeInOut' }}>
+                <AiAvatar size={24} />
+              </motion.div>
+              <div>
+                <div style={styles.headerTitleRow}>
+                  <span style={styles.headerTitle}>ผู้ช่วยออกแบบเกม</span>
+                  {lastProvider && (
+                    <span style={styles.providerBadge}>
+                      {lastProvider === 'gemini' ? 'Gemini' : lastProvider === 'owl-alpha' ? 'Owl Alpha' : lastProvider}
+                    </span>
+                  )}
+                </div>
+                <span style={styles.headerSubtitle}>พร้อมช่วยคุณ</span>
+              </div>
             </div>
-            <span style={styles.headerSubtitle}>พร้อมช่วยคุณ</span>
-          </div>
-        </div>
-        <button onClick={() => setChatOpen(false)} style={styles.closeBtn} aria-label="ปิด">
-          ✕
-        </button>
-      </div>
+            <button onClick={() => setChatOpen(false)} style={styles.closeBtn} aria-label="ปิด">
+              ✕
+            </button>
+          </motion.div>
  
       {/* dropdown สลับ provider — โผล่เฉพาะตอน dev (localhost) ไม่ขึ้น production */}
       {isDevMode && (
@@ -199,10 +219,15 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
       {/* พื้นที่ข้อความ */}
       <div ref={scrollRef} style={styles.messages}>
         {messages.length === 0 && (
-          <div style={styles.empty}>
+          <motion.div
+            style={styles.empty}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: 0.18 }}
+          >
             สวัสดี! ถามอะไรเกี่ยวกับการออกแบบเกมหรือ monetization ได้เลย
             เราจะช่วยแนะนำ ไม่ทำแทนนะ
-          </div>
+          </motion.div>
         )}
         {messages.map((m, i) => (
           <div
@@ -253,7 +278,12 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
       )}
  
       {/* ช่องพิมพ์ */}
-      <div style={styles.inputRow}>
+      <motion.div
+        style={styles.inputRow}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.14 }}
+      >
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -272,8 +302,10 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
         >
           ส่ง
         </button>
-      </div>
-    </div>
+      </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
  

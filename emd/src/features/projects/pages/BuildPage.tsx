@@ -21,6 +21,7 @@ import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
+import FadeInCard from '../../../shared/components/FadeInCard'
 
 const PLACEMENT_TYPES: Array<'rewarded' | 'interstitial' | 'banner' | 'native'> = ['rewarded', 'interstitial', 'banner', 'native']
 const IAP_ITEM_TYPES: Array<'consumable' | 'non_consumable' | 'subscription'> = ['consumable', 'non_consumable', 'subscription']
@@ -262,6 +263,7 @@ export default function BuildPage() {
         <div className="space-y-6">
           {activePanel === 'overview' && (
             <>
+              <FadeInCard index={0}>
               <Card>
                 <p className="mb-5 text-xs font-black uppercase tracking-[0.18em] text-primary">A. Revenue Mix Target</p>
                 <input
@@ -277,7 +279,9 @@ export default function BuildPage() {
                   <span>IAP {100 - mix}%</span>
                 </div>
               </Card>
+              </FadeInCard>
 
+              <FadeInCard index={1}>
               <Card className="overflow-hidden p-0">
                 <div className="border-b border-line px-5 py-4">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">B. Monetization Map</p>
@@ -315,10 +319,12 @@ export default function BuildPage() {
                   </table>
                 </div>
               </Card>
+              </FadeInCard>
             </>
           )}
 
           {activePanel === 'ads' && (
+            <FadeInCard index={0}>
             <Card>
               <p className="mb-5 text-xs font-black uppercase tracking-[0.18em] text-primary">Ads Configuration</p>
               <div className="mb-5 grid gap-3 md:grid-cols-2">
@@ -376,9 +382,11 @@ export default function BuildPage() {
                 ))}
               </div>
             </Card>
+            </FadeInCard>
           )}
 
           {activePanel === 'iap' && (
+            <FadeInCard index={0}>
             <Card>
               <p className="mb-5 text-xs font-black uppercase tracking-[0.18em] text-primary">IAP Configuration</p>
               <div className="mb-5">
@@ -423,10 +431,12 @@ export default function BuildPage() {
                 ))}
               </div>
             </Card>
+            </FadeInCard>
           )}
         </div>
 
         <aside className="space-y-4">
+          <FadeInCard index={0}>
           <Card>
             <h2 className="font-black text-slate-950">Session Flow Preview</h2>
             <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-600">
@@ -434,7 +444,9 @@ export default function BuildPage() {
               Upgrade → Next
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={1}>
           <Card>
             <h2 className="font-black text-slate-950">Quick Summary</h2>
             <dl className="mt-4 space-y-3 text-sm">
@@ -443,7 +455,9 @@ export default function BuildPage() {
               <div className="flex justify-between gap-4"><dt className="text-slate-500">IAP Items</dt><dd className="font-black">{iapItems.length}</dd></div>
             </dl>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={2}>
           <Card>
             <h2 className="font-black text-slate-950">Pressure Meter</h2>
             <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
@@ -451,7 +465,9 @@ export default function BuildPage() {
             </div>
             <p className={`mt-3 text-sm font-black ${pressure.color}`}>Estimated Pressure: {pressure.label}</p>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={3}>
           <Card>
             <h2 className="font-black text-slate-950">Fairness Meter</h2>
             <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
@@ -459,8 +475,11 @@ export default function BuildPage() {
             </div>
             <p className={`mt-3 text-sm font-black ${fairness.color}`}>Fairness Level: {fairness.label}</p>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={4}>
           <AiSuggestionPanel stage="build" projectId={projectId ?? ''} />
+          </FadeInCard>
 
           <div className="sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button onClick={() => navigate(`/project/${projectId}/setup`)} className="rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">

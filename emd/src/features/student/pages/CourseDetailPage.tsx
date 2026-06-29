@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase'
 import type { Course, Profile } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 
@@ -130,6 +131,7 @@ export default function CourseDetailPage() {
       )}
 
       {/* ── Course Info ────────────────────────────────────────── */}
+      <FadeInCard index={0}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           Course Info
@@ -149,8 +151,10 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </Card>
+      </FadeInCard>
 
       {/* ── Instructor Info ─────────────────────────────────────── */}
+      <FadeInCard index={1}>
       <Card>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-4">
           Instructor
@@ -178,8 +182,10 @@ export default function CourseDetailPage() {
           </div>
         )}
       </Card>
+      </FadeInCard>
 
       {/* ── Enrolled Students ───────────────────────────────────── */}
+      <FadeInCard index={2}>
       <Card>
         <div className="flex items-center gap-3 mb-4">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
@@ -214,6 +220,7 @@ export default function CourseDetailPage() {
           </table>
         )}
       </Card>
+      </FadeInCard>
 
       {/* Leave course — bottom of page, danger zone */}
       <div className="pt-2 border-t border-black/5">

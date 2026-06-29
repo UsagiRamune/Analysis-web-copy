@@ -8,6 +8,7 @@ import Card from '../../../shared/components/Card'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import { useChat } from '../context/ChatContext'
 
 const MAIN_GENRES = ['Puzzle', 'Action', 'RPG', 'Simulation', 'Strategy', 'Casual', 'Sports', 'Adventure']
@@ -218,6 +219,7 @@ export default function SetupPage() {
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-6">
+          <FadeInCard index={0}>
           <Card>
             <p className="mb-5 text-xs font-black uppercase tracking-[0.18em] text-primary">A. Basic Info</p>
             <div className="space-y-5">
@@ -378,7 +380,9 @@ export default function SetupPage() {
               </div>
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={1}>
           <Card>
             <p className="mb-5 text-xs font-black uppercase tracking-[0.18em] text-primary">B. Session & Loop</p>
             <div className="space-y-5">
@@ -407,16 +411,20 @@ export default function SetupPage() {
               </div>
             </div>
           </Card>
+          </FadeInCard>
         </div>
 
         <aside className="space-y-4">
+          <FadeInCard index={2}>
           <Card>
             <h2 className="text-base font-black text-slate-950">Context Preview</h2>
             <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-600">
               Start <span className="text-slate-300">→</span> Play <span className="text-slate-300">→</span> Outcome <span className="text-slate-300">→</span> Reward <span className="text-slate-300">→</span> Next
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={3}>
           <Card>
             <h2 className="text-base font-black text-slate-950">Quick Summary</h2>
             <dl className="mt-4 space-y-3 text-sm">
@@ -442,8 +450,11 @@ export default function SetupPage() {
               </div>
             </dl>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={4}>
           <AiSuggestionPanel stage="setup" projectId={projectId ?? ''} />
+          </FadeInCard>
 
           <div className="sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button

@@ -11,6 +11,7 @@ import {
 import type { Project, AdPlacement, IapItem } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 import StepIndicator from './components/StepIndicator'
@@ -138,6 +139,7 @@ export default function GuardrailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
+          <FadeInCard index={0}>
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -152,7 +154,9 @@ export default function GuardrailPage() {
               </div>
             </div>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={1}>
           <Card>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-black text-slate-950">Failure Points</h2>
@@ -186,9 +190,11 @@ export default function GuardrailPage() {
               </div>
             )}
           </Card>
+          </FadeInCard>
         </div>
 
         <aside className="space-y-4">
+          <FadeInCard index={2}>
           <Card>
             <h2 className="font-black text-slate-950">Passed</h2>
             <ul className="mt-4 space-y-3 text-sm font-medium text-slate-600">
@@ -200,7 +206,9 @@ export default function GuardrailPage() {
               ))}
             </ul>
           </Card>
+          </FadeInCard>
 
+          <FadeInCard index={3}>
           <Card>
             <h2 className="font-black text-slate-950">Plan Snapshot</h2>
             <dl className="mt-4 space-y-3 text-sm">
@@ -209,6 +217,7 @@ export default function GuardrailPage() {
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Guardrail</dt><dd className="font-black">{findings.length ? 'Needs Fix' : 'Ready'}</dd></div>
             </dl>
           </Card>
+          </FadeInCard>
 
           <div className="sticky bottom-4 flex gap-3 rounded-lg border border-line bg-white p-3 shadow-lg">
             <button onClick={() => navigate(`/project/${projectId}/build`)} className="rounded-lg border border-line px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">

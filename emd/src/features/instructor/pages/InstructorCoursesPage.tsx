@@ -9,6 +9,7 @@ import {
 import type { Course } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
 
@@ -302,13 +303,16 @@ export default function InstructorCoursesPage() {
 
       {/* Course List — shown first so instructor sees their courses immediately */}
       {courses.length === 0 ? (
+        <FadeInCard index={0}>
         <Card className="text-center py-10">
           <p className="text-gray-400 text-sm">No courses yet. Click "+ Add Course" to create one.</p>
         </Card>
+        </FadeInCard>
       ) : (
         <div className="space-y-4">
-          {courses.map((course) => (
-            <Card key={course.id}>
+          {courses.map((course, index) => (
+            <FadeInCard key={course.id} index={index}>
+            <Card>
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1.5">
@@ -351,12 +355,14 @@ export default function InstructorCoursesPage() {
                 </div>
               </div>
             </Card>
+            </FadeInCard>
           ))}
         </div>
       )}
 
       {/* Create Course Form — hidden behind "Add Course" button */}
       {showCreateForm && (
+        <FadeInCard index={0}>
         <Card>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-5">
             Create New Course
@@ -425,6 +431,7 @@ export default function InstructorCoursesPage() {
             </button>
           </form>
         </Card>
+        </FadeInCard>
       )}
     </PageContainer>
   )
