@@ -8,7 +8,7 @@ import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
-import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
+import { Skeleton, SkeletonCard, SkeletonRow, SkeletonStatCard } from '../../../shared/components/Skeleton'
 
 const ALL_COURSES = '__ALL__'
 
@@ -61,11 +61,16 @@ export default function InstructorDashboardPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="space-y-4">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+        <Skeleton className="h-9 w-64" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <SkeletonStatCard />
+          <SkeletonStatCard />
+          <SkeletonStatCard />
         </div>
+        <SkeletonCard />
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
       </PageContainer>
     )
   }

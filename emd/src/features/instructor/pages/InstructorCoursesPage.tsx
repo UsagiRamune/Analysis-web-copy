@@ -11,7 +11,7 @@ import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
-import { SkeletonCard } from '../../../shared/components/Skeleton'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
 import { notify } from '../../../shared/lib/toast'
 
 // Generate a random invite code like "DG-A4F2"
@@ -261,11 +261,13 @@ export default function InstructorCoursesPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="space-y-4">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-10 w-32 rounded-full" />
         </div>
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
       </PageContainer>
     )
   }

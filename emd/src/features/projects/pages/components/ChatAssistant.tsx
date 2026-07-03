@@ -38,9 +38,6 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
   const [lastProvider, setLastProvider] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const [showHint, setShowHint] = useState(false)
-  // ── ใหม่: เก็บ text ที่กำลัง stream อยู่ แยกออกจาก messages ──
-  // พอ stream เสร็จจะ addMessage แล้ว reset เป็น ''
-  const [streamingText, setStreamingText] = useState('')
 
   const isDevMode = import.meta.env.DEV
 
@@ -50,10 +47,10 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // auto-scroll — scroll ทุกครั้งที่มีข้อความใหม่หรือ streamingText เปลี่ยน
+  // auto-scroll ทุกครั้งที่ messages เปลี่ยน (รวมตอน stream update)
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, streamingText, isSending])
+  }, [messages, isSending])
 
   // toast hint — เด้งบอกแนวทางถามตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ แล้วหายใน 4 วิ
   useEffect(() => {
@@ -63,7 +60,7 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
     return () => clearTimeout(timer)
   }, [messages, hasAiReplied, hasProjectId, canSummarize, isSending])
 
-  // ── ส่งข้อความ (รองรับ streaming) ──
+  // ── ส่งข้อความ (streaming จริง) ──
   async function handleSend() {
     const text = input.trim()
     if (!text || isSending) return
@@ -72,9 +69,12 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
     setInput('')
     addMessage({ role: 'user', text })
     setIsSending(true)
-    setStreamingText('') // reset ทุกครั้งก่อนส่งใหม่
 
-    let fullReply = ''
+    // สร้าง id เฉพาะให้ placeholder — ใช้ timestamp + random กัน collision
+    const placeholderId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+
+    // เพิ่ม placeholder ข้อความว่างๆ ก่อน — จะ update ทีละ chunk ตอน stream
+    addMessage({ role: 'model', text: '', id: placeholderId })
 
     try {
       const { reply, provider } = await sendChatMessage({
@@ -83,21 +83,20 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
         history: messages,
         liveDraft,
         providerOverride: selectedProvider,
-        onChunk: (chunk) => {
-          // แต่ละ chunk มาถึง → update placeholder ให้แสดง text สะสม
-          updateMessage(placeholderId, chunk)
-          // หมายเหตุ: consumeStream ใน chat.service ส่ง fullText สะสมมา ไม่ใช่แค่ chunk ใหม่
-          // เพราะฉะนั้น updateMessage ด้วย chunk (= fullText) ได้เลย ไม่ต้องต่อเองที่นี่
+        // onChunk รับ fullText สะสม (ไม่ใช่แค่ chunk ใหม่) จาก consumeStream ใน chat.service
+        // updateMessage ด้วย fullText ตรงๆ ได้เลย ไม่ต้องต่อเองที่นี่
+        onChunk: (fullText) => {
+          updateMessage(placeholderId, fullText)
         },
       })
 
-      // stream เสร็จ → update placeholder ด้วย reply สุดท้าย (กัน edge case text ไม่ครบ)
+      // stream เสร็จ → update ด้วย reply สุดท้ายกัน edge case
       updateMessage(placeholderId, reply)
       setLastProvider(provider)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
       setError(msg)
-      // error → เอา placeholder ทิ้ง ไม่ให้ message ว่างค้างใน chat
+      // error → เอา placeholder ทิ้ง ไม่ให้ข้อความว่างค้างใน chat
       removeMessage(placeholderId)
     } finally {
       setIsSending(false)
@@ -105,7 +104,7 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
   }
 
   // ── สรุปคำแนะนำ → ส่งเข้า panel ──
-  // summarize ไม่ stream — ต้องรับ JSON เต็มก้อน
+  // summarize ไม่ stream — ต้องรับ JSON เต็มก้อนเพื่อ parse
   async function handleSummarize() {
     if (isSummarizing || messages.length === 0) return
     if (!projectId) {
@@ -209,7 +208,7 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
 
           {/* พื้นที่ข้อความ */}
           <div ref={scrollRef} style={styles.messages}>
-            {messages.length === 0 && !streamingText && (
+            {messages.length === 0 && (
               <motion.div
                 style={styles.empty}
                 initial={{ opacity: 0, y: 10 }}
@@ -221,34 +220,34 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
               </motion.div>
             )}
 
-            {/* messages ที่ complete แล้ว */}
             {messages.map((m, i) => (
               <div
-                key={i}
+                key={m.id ?? i}
                 style={{
                   ...styles.bubble,
                   ...(m.role === 'user' ? styles.bubbleUser : styles.bubbleAi),
                 }}
               >
                 {m.text}
+                {/* cursor กระพริบเฉพาะ placeholder ล่าสุดที่กำลัง stream อยู่ */}
+                {isSending &&
+                  i === messages.length - 1 &&
+                  m.role === 'model' && (
+                    <span style={styles.cursor}>▋</span>
+                  )}
               </div>
             ))}
 
-            {/* ── streaming bubble — โชว์ระหว่างรอ stream เสร็จ ── */}
-            {streamingText ? (
-              <div style={{ ...styles.bubble, ...styles.bubbleAi }}>
-                {streamingText}
-                {/* cursor กระพริบบอกว่ากำลัง stream อยู่ */}
-                <span style={styles.cursor}>▋</span>
-              </div>
-            ) : isSending ? (
-              /* fallback: ถ้า stream ยังไม่เริ่ม (กำลัง fetch) โชว์ "กำลังคิด…" */
-              <div style={{ ...styles.bubble, ...styles.bubbleAi }}>
-                <span style={styles.typingDot} />
-                <span style={styles.typingDot} />
-                <span style={styles.typingDot} />
-              </div>
-            ) : null}
+            {/* typing dots — โชว์เฉพาะตอน fetch ยังไม่เริ่ม stream (placeholder ยังว่างอยู่) */}
+            {isSending &&
+              messages[messages.length - 1]?.role === 'model' &&
+              messages[messages.length - 1]?.text === '' && (
+                <div style={{ ...styles.bubble, ...styles.bubbleAi, ...styles.typingBubble }}>
+                  <span style={styles.typingDot} />
+                  <span style={styles.typingDot} />
+                  <span style={styles.typingDot} />
+                </div>
+              )}
           </div>
 
           {/* error */}
@@ -347,7 +346,6 @@ function hasConcreteNumber(text: string): boolean {
 function scoreForSummarize(messages: ChatMessage[]): number {
   const userText = messages.filter((m) => m.role === 'user').map((m) => m.text).join(' ')
   const aiText = messages.filter((m) => m.role === 'model').map((m) => m.text).join(' ')
-
   let score = 0
   score += Math.min(2, countTopicKeywords(userText))
   score += Math.min(2, countJudgmentPatterns(aiText))
@@ -480,27 +478,27 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#F0F7FC',
     color: '#1A4A66',
     borderBottomLeftRadius: 4,
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'flex-end',
-    gap: 2,
   },
-  // cursor กระพริบตอน stream
+  typingBubble: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '10px 14px',
+  },
   cursor: {
     display: 'inline-block',
     animation: 'blink 0.8s step-end infinite',
     color: '#5AAEDB',
     fontWeight: 700,
     marginLeft: 1,
+    lineHeight: 1,
   },
-  // typing dots ตอน fetch ยังไม่เริ่ม stream
   typingDot: {
     display: 'inline-block',
     width: 6,
     height: 6,
     borderRadius: '50%',
     background: '#5AAEDB',
-    margin: '0 2px',
     animation: 'bounce 1s infinite',
   },
   error: {
@@ -534,7 +532,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   btnDisabled: {
     opacity: 0.5,
@@ -552,7 +550,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     border: '1px solid #B8DCF2',
     fontSize: 14,
-    resize: 'none',
+    resize: 'none' as const,
     outline: 'none',
     fontFamily: 'inherit',
     lineHeight: 1.5,

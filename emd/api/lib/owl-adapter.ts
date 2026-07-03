@@ -115,5 +115,5 @@ async function* generateStream(params: GenerateParams): AsyncGenerator<StreamChu
 export const owlProvider: AiProvider = {
   name: 'owl-alpha',
   generate,
-  generateSteam: generateStream,
+  generateStream,
 }
