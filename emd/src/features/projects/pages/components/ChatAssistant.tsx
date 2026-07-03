@@ -2,9 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useChat } from '../../context/ChatContext'
 import { sendChatMessage, summarizeChat, saveSuggestions, type ChatMessage } from '../../services/chat.service'
- 
-// Avatar AI แบบนามธรรม (วงกลม Himawari blue + หน้ายิ้ม) — ไม่ใช่ตัวละครมีลิขสิทธิ์
-// optical center ตรงกับ geometric center ของ viewBox พอดี (เช็คด้วย pixel bbox แล้ว)
+
+// ── Avatar AI (วงกลม Himawari blue + หน้ายิ้ม) ──
 function AiAvatar({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
@@ -15,91 +14,105 @@ function AiAvatar({ size = 32 }: { size?: number }) {
     </svg>
   )
 }
- 
+
 interface ChatAssistantProps {
   projectId: string
 }
- 
+
 export default function ChatAssistant({ projectId }: ChatAssistantProps) {
   const {
     messages,
     addMessage,
+    updateMessage,
+    removeMessage,
     liveDraft,
     addSuggestions,
     isChatOpen,
     setChatOpen,
   } = useChat()
- 
+
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // provider ที่ตอบล่าสุด — โชว์ badge ใน header ให้เห็นชัดว่ากำลังเทสตัวไหนอยู่
   const [lastProvider, setLastProvider] = useState<string | null>(null)
-  // provider ที่เลือกจาก dropdown (dev only) — null = ใช้ default ตาม env (AI_PROVIDER)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
-  // toast hint — เด้งบอกแนวทางถามแล้วหายไปเอง ไม่ค้างกินที่ถาวรใน UI
   const [showHint, setShowHint] = useState(false)
-  // โผล่เฉพาะตอนรัน Vite dev (localhost) — build production จะเป็น false เสมอ ปุ่มหายอัตโนมัติ
+  // ── ใหม่: เก็บ text ที่กำลัง stream อยู่ แยกออกจาก messages ──
+  // พอ stream เสร็จจะ addMessage แล้ว reset เป็น ''
+  const [streamingText, setStreamingText] = useState('')
+
   const isDevMode = import.meta.env.DEV
- 
-  // ปุ่มสรุปโผล่เมื่อ AI ตอบแล้วอย่างน้อย 1 ครั้ง + มี project จริง + บทสนทนา
-  // มีคะแนนความพร้อมสรุปถึง threshold (ดูเหตุผลที่ scoreForSummarize ท้ายไฟล์)
+
   const hasAiReplied = messages.some((m) => m.role === 'model')
   const hasProjectId = Boolean(projectId)
   const canSummarize = hasAiReplied && hasProjectId && scoreForSummarize(messages) >= SUMMARIZE_SCORE_THRESHOLD
- 
-  // auto-scroll ลงล่างสุดเมื่อมีข้อความใหม่
+
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // auto-scroll — scroll ทุกครั้งที่มีข้อความใหม่หรือ streamingText เปลี่ยน
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, isSending])
- 
-  // toast hint — เด้งบอกแนวทางถามทุกครั้งที่ AI ตอบใหม่แต่ยังสรุปไม่ได้
-  // (กันค้างถาวรตามที่ user ขอ — โผล่สัก 4 วิ แล้วหายไปเอง ไม่กินที่ใน UI)
+  }, [messages, streamingText, isSending])
+
+  // toast hint — เด้งบอกแนวทางถามตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ แล้วหายใน 4 วิ
   useEffect(() => {
     if (!hasAiReplied || !hasProjectId || canSummarize || isSending) return
     setShowHint(true)
     const timer = setTimeout(() => setShowHint(false), 4000)
     return () => clearTimeout(timer)
   }, [messages, hasAiReplied, hasProjectId, canSummarize, isSending])
- 
-  // ── ส่งข้อความ ──
+
+  // ── ส่งข้อความ (รองรับ streaming) ──
   async function handleSend() {
     const text = input.trim()
     if (!text || isSending) return
- 
+
     setError(null)
     setInput('')
     addMessage({ role: 'user', text })
     setIsSending(true)
- 
+    setStreamingText('') // reset ทุกครั้งก่อนส่งใหม่
+
+    let fullReply = ''
+
     try {
       const { reply, provider } = await sendChatMessage({
         projectId,
         message: text,
-        history: messages,        // ส่งประวัติก่อนหน้า (ยังไม่รวมข้อความล่าสุด — backend ต่อให้)
-        liveDraft,                // ถ้าอยู่ Setup จะมีค่า, หน้าอื่น = null → ดึง DB
-        providerOverride: selectedProvider,   // dev only — null ถ้าไม่ได้เลือกจาก dropdown
+        history: messages,
+        liveDraft,
+        providerOverride: selectedProvider,
+        onChunk: (chunk) => {
+          // แต่ละ chunk มาถึง → update placeholder ให้แสดง text สะสม
+          updateMessage(placeholderId, chunk)
+          // หมายเหตุ: consumeStream ใน chat.service ส่ง fullText สะสมมา ไม่ใช่แค่ chunk ใหม่
+          // เพราะฉะนั้น updateMessage ด้วย chunk (= fullText) ได้เลย ไม่ต้องต่อเองที่นี่
+        },
       })
-      addMessage({ role: 'model', text: reply })
+
+      // stream เสร็จ → update placeholder ด้วย reply สุดท้าย (กัน edge case text ไม่ครบ)
+      updateMessage(placeholderId, reply)
       setLastProvider(provider)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
       setError(msg)
+      // error → เอา placeholder ทิ้ง ไม่ให้ message ว่างค้างใน chat
+      removeMessage(placeholderId)
     } finally {
       setIsSending(false)
     }
   }
- 
+
   // ── สรุปคำแนะนำ → ส่งเข้า panel ──
+  // summarize ไม่ stream — ต้องรับ JSON เต็มก้อน
   async function handleSummarize() {
     if (isSummarizing || messages.length === 0) return
     if (!projectId) {
       setError('ต้องมีโปรเจกต์จริงก่อนถึงจะบันทึกคำแนะนำได้ (กด Continue ในหน้า Setup ก่อน)')
       return
     }
- 
+
     setError(null)
     setIsSummarizing(true)
     try {
@@ -109,8 +122,6 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
       })
       addSuggestions(suggestions)
       setLastProvider(provider)
-      // บันทึกลง Supabase ให้ถาวร (ไม่บล็อก UI ถ้า save พลาด — แค่ error เงียบ ๆ ใน console)
-      // model_used มาจาก backend จริง ไม่ hardcode — เปลี่ยน provider ได้โดยไม่ต้องแก้ที่นี่
       if (suggestions.length > 0) {
         try {
           await saveSuggestions({ projectId, suggestions, model: provider })
@@ -125,203 +136,185 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
       setIsSummarizing(false)
     }
   }
- 
-  // กด Enter ส่ง (Shift+Enter ขึ้นบรรทัดใหม่)
+
+  // กด Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
   }
- 
-  // ── render ทั้ง fab และ panel ผ่าน AnimatePresence ──
-  // ใช้ layoutId เดียวกันที่ avatar ทั้ง 2 จุด (fab / header) — framer-motion
-  // จะ track แล้ว animate ตำแหน่ง/ขนาดให้เปลี่ยนอัตโนมัติตอนสลับ (avatar
-  // "เลื่อน" จากกลางปุ่มไปอยู่มุมซ้ายบนของ header) ไม่ต้องคำนวณ x,y เอง
+
   return (
     <AnimatePresence mode="wait">
+      {/* ── FAB (ปุ่มลอย) ── */}
       {!isChatOpen ? (
         <motion.button
           key="fab"
+          layoutId="ai-avatar"
           onClick={() => setChatOpen(true)}
           style={styles.fab}
-          aria-label="เปิดผู้ช่วย AI"
-          initial={{ opacity: 0, scale: 0.6 }}
+          initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.12 } }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          exit={{ opacity: 0, scale: 0.7 }}
+          transition={{ duration: 0.2 }}
+          aria-label="เปิด AI Assistant"
         >
-          <motion.div layoutId="ai-avatar" transition={{ duration: 0.32, ease: 'easeInOut' }}>
-            <AiAvatar size={34} />
-          </motion.div>
+          <AiAvatar size={28} />
         </motion.button>
       ) : (
+        /* ── Chat Panel ── */
         <motion.div
           key="panel"
-          style={{ ...styles.panel, transformOrigin: 'bottom right' }}
-          initial={{ opacity: 0, scaleY: 0.3, scaleX: 0.85 }}
-          animate={{ opacity: 1, scaleY: 1, scaleX: 1 }}
-          exit={{ opacity: 0, scaleY: 0.3, scaleX: 0.85, transition: { duration: 0.15 } }}
-          transition={{ duration: 0.32, ease: [0.34, 1.56, 0.64, 1] }} // overshoot นิดๆ ให้ดูสนุก ฉับไว
+          style={styles.panel}
+          initial={{ opacity: 0, y: 32, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 32, scale: 0.96 }}
+          transition={{ duration: 0.22 }}
         >
-          <style>{`
-            @keyframes fadeInOut {
-              0% { opacity: 0; transform: translateY(-4px); }
-              10% { opacity: 1; transform: translateY(0); }
-              85% { opacity: 1; }
-              100% { opacity: 0; }
-            }
-          `}</style>
-          {/* header */}
-          <motion.div
-            style={styles.header}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, delay: 0.08 }}
-          >
+          {/* Header */}
+          <div style={styles.header}>
             <div style={styles.headerLeft}>
-              <motion.div layoutId="ai-avatar" style={styles.avatarRing} transition={{ duration: 0.32, ease: 'easeInOut' }}>
-                <AiAvatar size={24} />
+              <motion.div layoutId="ai-avatar" style={styles.avatarRing}>
+                <AiAvatar size={22} />
               </motion.div>
               <div>
                 <div style={styles.headerTitleRow}>
-                  <span style={styles.headerTitle}>ผู้ช่วยออกแบบเกม</span>
+                  <span style={styles.headerTitle}>AI Assistant</span>
                   {lastProvider && (
-                    <span style={styles.providerBadge}>
-                      {lastProvider === 'gemini' ? 'Gemini' : lastProvider === 'owl-alpha' ? 'Owl Alpha' : lastProvider}
-                    </span>
+                    <span style={styles.providerBadge}>{lastProvider}</span>
                   )}
                 </div>
-                <span style={styles.headerSubtitle}>พร้อมช่วยคุณ</span>
+                <div style={styles.headerSubtitle}>ที่ปรึกษา GDD เฉพาะ</div>
               </div>
             </div>
-            <button onClick={() => setChatOpen(false)} style={styles.closeBtn} aria-label="ปิด">
-              ✕
+            <button onClick={() => setChatOpen(false)} style={styles.closeBtn} aria-label="ปิด">✕</button>
+          </div>
+
+          {/* Dev switcher — โผล่เฉพาะ localhost */}
+          {isDevMode && (
+            <div style={styles.devSwitcher}>
+              <span style={styles.devLabel}>⚙️ DEV</span>
+              <select
+                value={selectedProvider ?? ''}
+                onChange={(e) => setSelectedProvider(e.target.value || null)}
+                style={styles.devSelect}
+              >
+                <option value="">Default (.env)</option>
+                <option value="gemini">Gemini</option>
+                <option value="owl-alpha">Owl Alpha</option>
+              </select>
+            </div>
+          )}
+
+          {/* พื้นที่ข้อความ */}
+          <div ref={scrollRef} style={styles.messages}>
+            {messages.length === 0 && !streamingText && (
+              <motion.div
+                style={styles.empty}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: 0.18 }}
+              >
+                สวัสดี! ถามอะไรเกี่ยวกับการออกแบบเกมหรือ monetization ได้เลย
+                เราจะช่วยแนะนำ ไม่ทำแทนนะ
+              </motion.div>
+            )}
+
+            {/* messages ที่ complete แล้ว */}
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.bubble,
+                  ...(m.role === 'user' ? styles.bubbleUser : styles.bubbleAi),
+                }}
+              >
+                {m.text}
+              </div>
+            ))}
+
+            {/* ── streaming bubble — โชว์ระหว่างรอ stream เสร็จ ── */}
+            {streamingText ? (
+              <div style={{ ...styles.bubble, ...styles.bubbleAi }}>
+                {streamingText}
+                {/* cursor กระพริบบอกว่ากำลัง stream อยู่ */}
+                <span style={styles.cursor}>▋</span>
+              </div>
+            ) : isSending ? (
+              /* fallback: ถ้า stream ยังไม่เริ่ม (กำลัง fetch) โชว์ "กำลังคิด…" */
+              <div style={{ ...styles.bubble, ...styles.bubbleAi }}>
+                <span style={styles.typingDot} />
+                <span style={styles.typingDot} />
+                <span style={styles.typingDot} />
+              </div>
+            ) : null}
+          </div>
+
+          {/* error */}
+          {error && <div style={styles.error}>{error}</div>}
+
+          {/* แจ้งเตือน — คุยแล้วแต่ยังไม่มี project จริง */}
+          {hasAiReplied && !hasProjectId && (
+            <div style={styles.hint}>
+              💡 บันทึก/สรุปคำแนะนำได้หลังกด "Continue" เพื่อสร้างโปรเจกต์ก่อน
+            </div>
+          )}
+
+          {/* toast hint — เด้งตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ */}
+          {showHint && hasProjectId && !canSummarize && (
+            <div style={{ ...styles.hint, ...styles.hintToast }}>
+              💡 ลองถามเรื่อง genre, core loop, monetization ฯลฯ ก่อน ปุ่มสรุปจะขึ้นเมื่อมีคำแนะนำให้เก็บ
+            </div>
+          )}
+
+          {/* ปุ่มสรุปคำแนะนำ */}
+          {canSummarize && (
+            <button
+              onClick={handleSummarize}
+              disabled={isSummarizing}
+              style={{
+                ...styles.summarizeBtn,
+                ...(isSummarizing ? styles.btnDisabled : {}),
+              }}
+            >
+              {isSummarizing ? 'กำลังสรุป…' : '📌 สรุปเป็นคำแนะนำ'}
+            </button>
+          )}
+
+          {/* ช่องพิมพ์ */}
+          <motion.div
+            style={styles.inputRow}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: 0.14 }}
+          >
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="พิมพ์คำถาม…"
+              rows={1}
+              style={styles.textarea}
+            />
+            <button
+              onClick={handleSend}
+              disabled={isSending || !input.trim()}
+              style={{
+                ...styles.sendBtn,
+                ...(isSending || !input.trim() ? styles.btnDisabled : {}),
+              }}
+            >
+              ส่ง
             </button>
           </motion.div>
- 
-      {/* dropdown สลับ provider — โผล่เฉพาะตอน dev (localhost) ไม่ขึ้น production */}
-      {isDevMode && (
-        <div style={styles.devSwitcher}>
-          <span style={styles.devLabel}>🧪 dev:</span>
-          <select
-            value={selectedProvider ?? ''}
-            onChange={(e) => setSelectedProvider(e.target.value || null)}
-            style={styles.devSelect}
-          >
-            <option value="">Default (.env)</option>
-            <option value="gemini">Gemini</option>
-            <option value="owl-alpha">Owl Alpha</option>
-          </select>
-        </div>
-      )}
- 
-      {/* พื้นที่ข้อความ */}
-      <div ref={scrollRef} style={styles.messages}>
-        {messages.length === 0 && (
-          <motion.div
-            style={styles.empty}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: 0.18 }}
-          >
-            สวัสดี! ถามอะไรเกี่ยวกับการออกแบบเกมหรือ monetization ได้เลย
-            เราจะช่วยแนะนำ ไม่ทำแทนนะ
-          </motion.div>
-        )}
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            style={{
-              ...styles.bubble,
-              ...(m.role === 'user' ? styles.bubbleUser : styles.bubbleAi),
-            }}
-          >
-            {m.text}
-          </div>
-        ))}
-        {isSending && <div style={{ ...styles.bubble, ...styles.bubbleAi }}>กำลังคิด…</div>}
-      </div>
- 
-      {/* error */}
-      {error && <div style={styles.error}>{error}</div>}
- 
-      {/* แจ้งเตือน — คุยแล้วแต่ยังไม่มี project จริง (เช่นหน้า /project/new ที่ยังไม่กด Continue)
-          อันนี้ค้างไว้ตลอด ไม่ใช่ toast เพราะเงื่อนไขนี้คงอยู่จนกว่าจะกด Continue */}
-      {hasAiReplied && !hasProjectId && (
-        <div style={styles.hint}>
-          💡 บันทึก/สรุปคำแนะนำได้หลังกด "Continue" เพื่อสร้างโปรเจกต์ก่อน
-        </div>
-      )}
- 
-      {/* toast — เด้งบอกแนวทางถามตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ แล้วหายไปเอง
-          ใน 4 วิ (ไม่ค้างถาวร ตามที่ user ขอ — มีประโยชน์ตอนไม่รู้จะถามอะไร
-          แต่ไม่ควรกินที่ใน UI ตลอดไป) */}
-      {showHint && hasProjectId && !canSummarize && (
-        <div style={{ ...styles.hint, ...styles.hintToast }}>
-          💡 ลองถามเรื่อง genre, core loop, monetization ฯลฯ ก่อน ปุ่มสรุปจะขึ้นเมื่อมีคำแนะนำให้เก็บ
-        </div>
-      )}
- 
-      {/* ปุ่มสรุปคำแนะนำ — โผล่เมื่อ AI ตอบแล้ว มี project และมีสาระเกี่ยวกับเกมแล้วเท่านั้น */}
-      {canSummarize && (
-        <button
-          onClick={handleSummarize}
-          disabled={isSummarizing}
-          style={{
-            ...styles.summarizeBtn,
-            ...(isSummarizing ? styles.btnDisabled : {}),
-          }}
-        >
-          {isSummarizing ? 'กำลังสรุป…' : '📌 สรุปเป็นคำแนะนำ'}
-        </button>
-      )}
- 
-      {/* ช่องพิมพ์ */}
-      <motion.div
-        style={styles.inputRow}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.14 }}
-      >
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="พิมพ์คำถาม…"
-          rows={1}
-          style={styles.textarea}
-        />
-        <button
-          onClick={handleSend}
-          disabled={isSending || !input.trim()}
-          style={{
-            ...styles.sendBtn,
-            ...(isSending || !input.trim() ? styles.btnDisabled : {}),
-          }}
-        >
-          ส่ง
-        </button>
-      </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
   )
 }
- 
-// ── สไตล์ (inline เพื่อไม่ผูกกับ Tailwind config — ปรับ theme ได้ทีหลัง) ──
-// ── คำนวณว่าบทสนทนา "พร้อมสรุป" แค่ไหน — ใช้ scoring แทน keyword เดี่ยว ──
-// ทำไมต้อง scoring: เทสจริงพบว่า keyword เดียวพลาดได้ 2 ทาง
-//   1) AI ทักทายเฉย ๆ แต่ลง bullet "เสนอตัวเลือกให้เลือกถาม" ซึ่งมีคำว่า
-//      ads/iap/รายได้ ปนอยู่ในตัวเลือก ทำให้ keyword ติดผิด (false positive)
-//   2) user ถามกว้าง ๆ ("สรุปทั้งหมดหน่อย") ไม่มี keyword หัวข้อเลย แต่ AI
-//      ตอบด้วยคำแนะนำที่เป็นรูปธรรมจริง (false negative)
-// แก้โดยรวม 3 สัญญาณที่ทนทานกว่าคำเดี่ยว ๆ แล้วให้คะแนนสะสม:
-//   - topic keyword ที่ user ถาม (ดูเจตนาจาก user เป็นหลัก)
-//   - judgment pattern ในคำตอบ AI ("ยังไม่ระบุ", "แพงเกินไป", "ควรเพิ่ม" ฯลฯ
-//     — คำที่มักตามด้วยเนื้อหาเจาะจง ไม่ใช่แค่หัวข้อกว้าง ๆ)
-//   - ตัวเลข/ราคาที่ AI อ้างอิงจริง (สัญญาณว่ากำลังพูดถึงข้อมูลเกมจริง)
- 
+
+// ── Scoring: คำนวณว่าบทสนทนา "พร้อมสรุป" แค่ไหน ──
 const TOPIC_KEYWORDS = [
   'genre', 'แนวเกม', 'platform', 'แพลตฟอร์ม', 'target audience', 'กลุ่มเป้าหมาย',
   'core loop', 'core mechanic', 'กลไก', 'session', 'เซสชัน',
@@ -330,38 +323,39 @@ const TOPIC_KEYWORDS = [
   'interstitial', 'rewarded', 'guardrail', 'จริยธรรม',
   'gdd', 'design', 'ออกแบบ', 'balance', 'สมดุล', 'pitch',
 ]
- 
+
 const JUDGMENT_PATTERNS = [
   'ยังไม่ระบุ', 'ยังไม่มี', 'ยังไม่ได้', 'ควรเพิ่ม', 'ควรเลือก', 'ควรปรับ',
   'แพงเกินไป', 'น้อยไป', 'มากไป', 'อาจจะแพง', 'อาจจะน้อย', 'เสี่ยงต่อ', 'ขาดหาย',
 ]
- 
+
 const SUMMARIZE_SCORE_THRESHOLD = 2
- 
+
 function countTopicKeywords(text: string): number {
   const lower = text.toLowerCase()
   return TOPIC_KEYWORDS.filter((kw) => lower.includes(kw.toLowerCase())).length
 }
- 
+
 function countJudgmentPatterns(text: string): number {
   return JUDGMENT_PATTERNS.filter((kw) => text.includes(kw)).length
 }
- 
+
 function hasConcreteNumber(text: string): boolean {
   return /\d+/.test(text) || /[$%]/.test(text)
 }
- 
+
 function scoreForSummarize(messages: ChatMessage[]): number {
   const userText = messages.filter((m) => m.role === 'user').map((m) => m.text).join(' ')
   const aiText = messages.filter((m) => m.role === 'model').map((m) => m.text).join(' ')
- 
+
   let score = 0
-  score += Math.min(2, countTopicKeywords(userText)) // user ถามเรื่องอะไร (max 2 แต้ม)
-  score += Math.min(2, countJudgmentPatterns(aiText)) // AI ฟันธง/ประเมินกี่จุด (max 2 แต้ม)
-  score += hasConcreteNumber(aiText) ? 1 : 0 // AI อ้างตัวเลขจริงไหม (1 แต้ม)
+  score += Math.min(2, countTopicKeywords(userText))
+  score += Math.min(2, countJudgmentPatterns(aiText))
+  score += hasConcreteNumber(aiText) ? 1 : 0
   return score
 }
- 
+
+// ── Styles ──
 const styles: Record<string, React.CSSProperties> = {
   fab: {
     position: 'fixed',
@@ -459,7 +453,13 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 10,
   },
-  empty: { color: '#9ca3af', fontSize: 13, textAlign: 'center', marginTop: 24, lineHeight: 1.6 },
+  empty: {
+    color: '#9ca3af',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 24,
+    lineHeight: 1.6,
+  },
   bubble: {
     maxWidth: '80%',
     padding: '8px 12px',
@@ -469,56 +469,103 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   },
-  bubbleUser: { alignSelf: 'flex-end', background: '#5AAEDB', color: '#fff', borderBottomRightRadius: 4 },
-  bubbleAi: { alignSelf: 'flex-start', background: '#F0F7FC', color: '#1A4A66', borderBottomLeftRadius: 4 },
-  error: { color: '#dc2626', fontSize: 12, padding: '0 16px 8px' },
-  hint: { color: '#92400e', fontSize: 12, padding: '0 16px 8px', lineHeight: 1.5 },
-  hintToast: {
-    animation: 'fadeInOut 4s ease-in-out',
-    background: '#FFF8E8',
-    borderRadius: 8,
-    margin: '0 16px 8px',
-    padding: '6px 10px',
+  bubbleUser: {
+    alignSelf: 'flex-end',
+    background: '#5AAEDB',
+    color: '#fff',
+    borderBottomRightRadius: 4,
   },
-  summarizeBtn: {
-    margin: '0 16px 8px',
+  bubbleAi: {
+    alignSelf: 'flex-start',
+    background: '#F0F7FC',
+    color: '#1A4A66',
+    borderBottomLeftRadius: 4,
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  // cursor กระพริบตอน stream
+  cursor: {
+    display: 'inline-block',
+    animation: 'blink 0.8s step-end infinite',
+    color: '#5AAEDB',
+    fontWeight: 700,
+    marginLeft: 1,
+  },
+  // typing dots ตอน fetch ยังไม่เริ่ม stream
+  typingDot: {
+    display: 'inline-block',
+    width: 6,
+    height: 6,
+    borderRadius: '50%',
+    background: '#5AAEDB',
+    margin: '0 2px',
+    animation: 'bounce 1s infinite',
+  },
+  error: {
+    margin: '0 12px 8px',
     padding: '8px 12px',
-    background: '#EAF4FC',
-    color: '#1A6FA8',
-    border: '1px solid #B8DCF2',
+    background: '#FEE2E2',
+    color: '#B91C1C',
     borderRadius: 8,
     fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
   },
-  inputRow: {
-    display: 'flex',
-    gap: 8,
-    padding: 12,
-    borderTop: '1px solid #EDF4FA',
-    alignItems: 'flex-end',
-  },
-  textarea: {
-    flex: 1,
-    resize: 'none',
-    border: '1px solid #DCEDF8',
+  hint: {
+    margin: '0 12px 8px',
+    padding: '7px 12px',
+    background: '#EAF4FC',
+    color: '#1A4A66',
     borderRadius: 8,
-    padding: '8px 10px',
-    fontSize: 14,
-    fontFamily: 'inherit',
-    maxHeight: 80,
-    outline: 'none',
-    background: '#F7FAFD',
+    fontSize: 12,
   },
-  sendBtn: {
-    padding: '8px 16px',
+  hintToast: {
+    background: '#FFF7ED',
+    color: '#92400E',
+    border: '1px solid #FDE68A',
+  },
+  summarizeBtn: {
+    margin: '0 12px 8px',
+    padding: '8px 12px',
     background: '#5AAEDB',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  btnDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+  inputRow: {
+    display: 'flex',
+    gap: 8,
+    padding: '10px 12px 14px',
+    borderTop: '1px solid #DCEDF8',
+  },
+  textarea: {
+    flex: 1,
+    padding: '8px 10px',
+    borderRadius: 8,
+    border: '1px solid #B8DCF2',
     fontSize: 14,
-    fontWeight: 500,
+    resize: 'none',
+    outline: 'none',
+    fontFamily: 'inherit',
+    lineHeight: 1.5,
+    color: '#1A4A66',
+  },
+  sendBtn: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: 'none',
+    background: '#5AAEDB',
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: 14,
     cursor: 'pointer',
   },
-  btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
 }

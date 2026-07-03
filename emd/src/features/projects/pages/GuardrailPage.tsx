@@ -13,7 +13,8 @@ import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
+import { notify } from '../../../shared/lib/toast'
 import StepIndicator from './components/StepIndicator'
 
 interface Finding {
@@ -103,8 +104,10 @@ export default function GuardrailPage() {
     try {
       await updateProject(projectId, { current_step: 4 })
       navigate(`/project/${projectId}/output`)
+      notify.success('ผ่าน Guardrail แล้ว! ไปหน้า Output ได้เลย')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to proceed')
+      notify.error('ไม่สามารถดำเนินการต่อได้ ลองใหม่อีกครั้ง')
     } finally {
       setSaving(false)
     }
@@ -113,8 +116,14 @@ export default function GuardrailPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-9 w48" />
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <Skeleton className="h-48 rounded-lg" />
         </div>
       </PageContainer>
     )

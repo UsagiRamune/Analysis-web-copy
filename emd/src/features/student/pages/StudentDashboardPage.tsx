@@ -8,7 +8,7 @@ import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonRow, SkeletonStatCard } from '../../../shared/components/Skeleton'
 
 function getStepInfo(step: number): { label: string; variant: 'blue' | 'yellow' | 'purple' | 'green' } {
   switch (step) {
@@ -74,9 +74,22 @@ export default function StudentDashboardPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        {/* หัวหน้า — h1 + subtitle */}
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-64" />
         </div>
+        {/* stat cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <SkeletonStatCard />
+          <SkeletonStatCard />
+          <SkeletonStatCard />
+          <SkeletonStatCard />
+        </div>
+        {/* project list */}
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
       </PageContainer>
     )
   }

@@ -8,6 +8,7 @@ import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
 import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
 
 const ALL_COURSES = '__ALL__'
 
@@ -60,8 +61,10 @@ export default function InstructorDashboardPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <div className="space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </PageContainer>
     )

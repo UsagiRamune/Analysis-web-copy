@@ -10,10 +10,17 @@ export interface GenerateResult {
   usage: unknown
   providerName: string   // ชื่อ provider ที่ตอบจริง (เก็บลง DB ตอน save suggestion)
 }
+
+export interface StreamChunk {
+  text: string
+  done: boolean
+  usage?: unknown
+}
  
 export interface AiProvider {
   name: string
   generate(params: GenerateParams): Promise<GenerateResult>
+  generateStream?(params: GenerateParams): AsyncGenerator<StreamChunk>
 }
  
 // ── เลือก provider จาก env var ──

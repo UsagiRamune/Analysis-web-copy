@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { enrollStudent } from '../../courses/services/courses.service'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
+import FadeInCard from '../../../shared/components/FadeInCard'
 
 // Dedicated page for joining a course via invite code.
 export default function JoinCoursePage() {
@@ -54,6 +55,7 @@ export default function JoinCoursePage() {
           </p>
         </div>
 
+        <FadeInCard index={0}>
         <Card>
           {success ? (
             // Success state — shown briefly before redirect
@@ -96,6 +98,7 @@ export default function JoinCoursePage() {
             </form>
           )}
         </Card>
+        </FadeInCard>
       </div>
     </PageContainer>
   )

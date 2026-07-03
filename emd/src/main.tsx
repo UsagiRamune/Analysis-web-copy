@@ -15,7 +15,12 @@ createRoot(rootElement).render(
       <RouterProvider router={router} />
       {/* Toaster ตัวเดียวครอบทั้งแอป — เรียก toast จากที่ไหนก็ได้ผ่าน
           src/shared/lib/toast.ts ไม่ต้องห่อ context provider เพิ่ม */}
-      <Toaster position="top-right" richColors />
+      <Toaster 
+        position="top-right" 
+        richColors 
+        offset={{ top: 88 }}  // navbar 80px + เว้น 8px
+      />
     </AuthProvider>
   </StrictMode>
 )
+

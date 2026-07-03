@@ -19,7 +19,8 @@ import type { Project, AdPlacement, IapItem, AdsConfig, IapConfig } from '../../
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
+import { notify } from '../../../shared/lib/toast'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
 import FadeInCard from '../../../shared/components/FadeInCard'
@@ -113,6 +114,7 @@ export default function OutputPage() {
     setError(null)
     try {
       setProject(await submitProject(projectId))
+      notify.success('ส่งงานเรียบร้อย! รออาจารย์ตรวจนะ 🎉')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit')
     } finally {
@@ -143,6 +145,7 @@ export default function OutputPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete project')
       setDeleting(false)
+      notify.error('ลบโปรเจกต์ไม่สำเร็จ ลองใหม่')
     }
   }
 
@@ -570,8 +573,19 @@ export default function OutputPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-9 w49" />
+        <div className="grid gap-6 lg:grid-cols[1fr_300px]">
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-24 rounded-lg" />
+            <Skeleton className="h-24 rounded-lg" />
+          </div>
         </div>
       </PageContainer>
     )

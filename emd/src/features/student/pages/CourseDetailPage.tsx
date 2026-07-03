@@ -7,7 +7,7 @@ import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard, SkeletonRow} from '../../../shared/components/Skeleton'
 
 export default function CourseDetailPage() {
   const { courseId } = useParams<{ courseId: string }>()
@@ -77,9 +77,17 @@ export default function CourseDetailPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <div className="flex items-start gap-4">
+          <Skeleton className="h-9 w-20 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
         </div>
+        <SkeletonCard />
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
       </PageContainer>
     )
   }

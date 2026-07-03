@@ -11,7 +11,8 @@ import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import FadeInCard from '../../../shared/components/FadeInCard'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { SkeletonCard } from '../../../shared/components/Skeleton'
+import { notify } from '../../../shared/lib/toast'
 
 // Generate a random invite code like "DG-A4F2"
 function generateInviteCode(): string {
@@ -52,6 +53,7 @@ function EditModal({ course, onClose, onSaved, onDeleted }: EditModalProps) {
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete course')
+      notify.error('ลบคอร์สไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setDeleting(false)
     }
@@ -81,10 +83,12 @@ function EditModal({ course, onClose, onSaved, onDeleted }: EditModalProps) {
       })
       onSaved(actual)
       onClose()
+      notify.success('แก้ไขคอร์สเรียบร้อย!')
     } catch (err) {
       // Revert on failure
       onSaved(course)
       setError(err instanceof Error ? err.message : 'Failed to update')
+      notify.error('แก้ไขคอร์สไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setSaving(false)
     }
@@ -235,8 +239,10 @@ export default function InstructorCoursesPage() {
       setNewDescription('')
       setNewInviteCode(generateInviteCode())
       setShowCreateForm(false)
+      notify.success('สร้างคอร์สเรียบร้อย!')
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create course')
+      notify.error('สร้างคอร์สไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setCreating(false)
     }
@@ -255,8 +261,10 @@ export default function InstructorCoursesPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <div className="space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </PageContainer>
     )

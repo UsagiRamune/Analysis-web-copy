@@ -5,7 +5,8 @@ import { createProject, getProject, updateProject } from '../services/projects.s
 import type { Project } from '../../../lib/database.types'
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
+import { notify } from '../../../shared/lib/toast'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
 import FadeInCard from '../../../shared/components/FadeInCard'
@@ -165,9 +166,11 @@ export default function SetupPage() {
     try {
       const savedProjectId = await saveProject(2)
       if (savedProjectId) {
+        notify.success('บันทึกแล้ว ไปต่อขั้นที่ 2 ได้เลย')
         navigate(`/project/${savedProjectId}/build`)
       }
     } catch (err) {
+      notify.error('บัททึกไม่สำเร็จ ลองใหม่อีกครั้ง')
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSaving(false)
@@ -182,10 +185,12 @@ export default function SetupPage() {
     try {
       const savedProjectId = await saveProject()
       if (savedProjectId) {
+        notify.success('บันทึก Draft แล้ว')
         navigate('/dashboard')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save draft')
+      notify.error('บันทึก Draft ไม่สำเร็จ ลองอีกครั้ง')
       setSaving(false)
     }
   }
@@ -193,8 +198,21 @@ export default function SetupPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <Skeleton className="h-8 w-full" /> {/* StepIndicator */}
+        {/* header row */}
+        <div className="flex items-end justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-52 rounded-lg" /> {/* tab switcher */}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <Skeleton className="h-48 rounded-lg" /> {/* sidebar */}
         </div>
       </PageContainer>
     )

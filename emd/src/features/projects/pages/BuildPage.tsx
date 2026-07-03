@@ -18,7 +18,8 @@ import type { AdPlacement, IapItem, AdsConfig, IapConfig, Project } from '../../
 import PageContainer from '../../../app/layout/PageContainer'
 import Card from '../../../shared/components/Card'
 import Badge from '../../../shared/components/Badge'
-import Spinner from '../../../shared/components/Spinner'
+import { Skeleton, SkeletonCard } from '../../../shared/components/Skeleton'
+import { notify } from '../../../shared/lib/toast'
 import StepIndicator from './components/StepIndicator'
 import AiSuggestionPanel from './components/AiSuggestionPanel'
 import FadeInCard from '../../../shared/components/FadeInCard'
@@ -131,8 +132,10 @@ export default function BuildPage() {
         frequency_cap: newFrequencyCap ? parseInt(newFrequencyCap) : null,
       })
       setAdPlacements((prev) => [...prev, placement])
+      notify.success('เพิ่ม Ad Placement แล้ว')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add placement')
+      notify.error('เพิ่ม Ad Placement ไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setAddingPlacement(false)
     }
@@ -174,8 +177,10 @@ export default function BuildPage() {
       setNewItemName('')
       setNewItemPrice('')
       setNewItemDesc('')
+      notify.success('เพิ่ม IAP Item แล้ว')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add item')
+      notify.error('เพิ่ม IAP Item ไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setAddingItem(false)
     }
@@ -209,9 +214,12 @@ export default function BuildPage() {
       })
 
       await updateProject(projectId, { current_step: 3 })
+      notify.success('บันทึกแล้ว ไปต่อหน้า Guardrail ได้เลย')
       navigate(`/project/${projectId}/guardrail`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      const msg = err instanceof Error ? err.message : 'Failed to save'
+      setError(msg)
+      notify.error('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง')
     } finally {
       setSaving(false)
     }
@@ -220,8 +228,20 @@ export default function BuildPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="lg" />
+        <Skeleton className="h-8 w-full" />
+        <div className="flex items-end justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-52 rounded-lg" />
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <Skeleton className="h-48 rounded-lg" />
         </div>
       </PageContainer>
     )
