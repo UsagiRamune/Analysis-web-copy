@@ -41,18 +41,18 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
 
   const isDevMode = import.meta.env.DEV
 
-  const hasAiReplied = messages.some((m) => m.role === 'model')
+  const hasAiReplied = messages.some((m) => m.role === 'model' && m.text !== '')
   const hasProjectId = Boolean(projectId)
   const canSummarize = hasAiReplied && hasProjectId && scoreForSummarize(messages) >= SUMMARIZE_SCORE_THRESHOLD
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // auto-scroll ทุกครั้งที่ messages เปลี่ยน (รวมตอน stream update)
+  const [satisfyDismissed, setSatisfyDismissed] = useState(false)
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, isSending])
 
-  // toast hint — เด้งบอกแนวทางถามตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ แล้วหายใน 4 วิ
   useEffect(() => {
     if (!hasAiReplied || !hasProjectId || canSummarize || isSending) return
     setShowHint(true)
@@ -60,20 +60,17 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
     return () => clearTimeout(timer)
   }, [messages, hasAiReplied, hasProjectId, canSummarize, isSending])
 
-  // ── ส่งข้อความ (streaming จริง) ──
   async function handleSend() {
     const text = input.trim()
     if (!text || isSending) return
 
     setError(null)
     setInput('')
+    setSatisfyDismissed(false)
     addMessage({ role: 'user', text })
     setIsSending(true)
 
-    // สร้าง id เฉพาะให้ placeholder — ใช้ timestamp + random กัน collision
     const placeholderId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-
-    // เพิ่ม placeholder ข้อความว่างๆ ก่อน — จะ update ทีละ chunk ตอน stream
     addMessage({ role: 'model', text: '', id: placeholderId })
 
     try {
@@ -83,28 +80,22 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
         history: messages,
         liveDraft,
         providerOverride: selectedProvider,
-        // onChunk รับ fullText สะสม (ไม่ใช่แค่ chunk ใหม่) จาก consumeStream ใน chat.service
-        // updateMessage ด้วย fullText ตรงๆ ได้เลย ไม่ต้องต่อเองที่นี่
         onChunk: (fullText) => {
           updateMessage(placeholderId, fullText)
         },
       })
 
-      // stream เสร็จ → update ด้วย reply สุดท้ายกัน edge case
       updateMessage(placeholderId, reply)
       setLastProvider(provider)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
       setError(msg)
-      // error → เอา placeholder ทิ้ง ไม่ให้ข้อความว่างค้างใน chat
       removeMessage(placeholderId)
     } finally {
       setIsSending(false)
     }
   }
 
-  // ── สรุปคำแนะนำ → ส่งเข้า panel ──
-  // summarize ไม่ stream — ต้องรับ JSON เต็มก้อนเพื่อ parse
   async function handleSummarize() {
     if (isSummarizing || messages.length === 0) return
     if (!projectId) {
@@ -136,7 +127,6 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
     }
   }
 
-  // กด Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -146,7 +136,6 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
 
   return (
     <AnimatePresence mode="wait">
-      {/* ── FAB (ปุ่มลอย) ── */}
       {!isChatOpen ? (
         <motion.button
           key="fab"
@@ -162,7 +151,6 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
           <AiAvatar size={28} />
         </motion.button>
       ) : (
-        /* ── Chat Panel ── */
         <motion.div
           key="panel"
           style={styles.panel}
@@ -190,7 +178,7 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
             <button onClick={() => setChatOpen(false)} style={styles.closeBtn} aria-label="ปิด">✕</button>
           </div>
 
-          {/* Dev switcher — โผล่เฉพาะ localhost */}
+          {/* Dev switcher */}
           {isDevMode && (
             <div style={styles.devSwitcher}>
               <span style={styles.devLabel}>⚙️ DEV</span>
@@ -229,25 +217,24 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
                 }}
               >
                 {m.text}
-                {/* cursor กระพริบเฉพาะ placeholder ล่าสุดที่กำลัง stream อยู่ */}
+                {/* cursor กระพริบเฉพาะ placeholder ล่าสุดที่กำลัง stream และมี text แล้ว */}
                 {isSending &&
                   i === messages.length - 1 &&
-                  m.role === 'model' && (
+                  m.role === 'model' &&
+                  m.text !== '' && (
                     <span style={styles.cursor}>▋</span>
                   )}
               </div>
             ))}
 
-            {/* typing dots — โชว์เฉพาะตอน fetch ยังไม่เริ่ม stream (placeholder ยังว่างอยู่) */}
-            {isSending &&
-              messages[messages.length - 1]?.role === 'model' &&
-              messages[messages.length - 1]?.text === '' && (
-                <div style={{ ...styles.bubble, ...styles.bubbleAi, ...styles.typingBubble }}>
-                  <span style={styles.typingDot} />
-                  <span style={styles.typingDot} />
-                  <span style={styles.typingDot} />
-                </div>
-              )}
+            {/* typing dots — โชว์เฉพาะตอน isSending แต่ยังไม่มี placeholder ใน messages */}
+            {isSending && !messages.some((m) => m.role === 'model' && m.id?.startsWith('msg_')) && (
+              <div style={{ ...styles.bubble, ...styles.bubbleAi, ...styles.typingBubble }}>
+                <span style={styles.typingDot} />
+                <span style={styles.typingDot} />
+                <span style={styles.typingDot} />
+              </div>
+            )}
           </div>
 
           {/* error */}
@@ -260,25 +247,37 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
             </div>
           )}
 
-          {/* toast hint — เด้งตอน AI ตอบใหม่แต่ยังสรุปไม่ได้ */}
+          {/* toast hint */}
           {showHint && hasProjectId && !canSummarize && (
             <div style={{ ...styles.hint, ...styles.hintToast }}>
               💡 ลองถามเรื่อง genre, core loop, monetization ฯลฯ ก่อน ปุ่มสรุปจะขึ้นเมื่อมีคำแนะนำให้เก็บ
             </div>
           )}
 
-          {/* ปุ่มสรุปคำแนะนำ */}
-          {canSummarize && (
-            <button
-              onClick={handleSummarize}
-              disabled={isSummarizing}
-              style={{
-                ...styles.summarizeBtn,
-                ...(isSummarizing ? styles.btnDisabled : {}),
-              }}
-            >
-              {isSummarizing ? 'กำลังสรุป…' : '📌 สรุปเป็นคำแนะนำ'}
-            </button>
+          {/* ปุ่มสรุป */}
+          {canSummarize && !satisfyDismissed && (
+            <div style={styles.satisfyCard}>
+              <p style={styles.satisfyText}>พอใจกับคำแนะนำแล้วหรือยัง?</p>
+              <div style={styles.satisfyBtnRow}>
+                <button
+                  onClick={handleSummarize}
+                  disabled={isSummarizing}
+                  style={{
+                    ...styles.satisfyBtnPrimary,
+                    ...(isSummarizing ? styles.btnDisabled : {}),
+                  }}
+                >
+                  {isSummarizing ? 'กำลังสรุป…' : '✅ พอแล้ว สรุปเลย'}
+                </button>
+                <button
+                  onClick={() => setSatisfyDismissed(true)}
+                  disabled={isSummarizing}
+                  style={styles.satisfyBtnGhost}
+                >
+                  ยังก่อน ขอคุยต่อ
+                </button>
+              </div>
+            </div>
           )}
 
           {/* ช่องพิมพ์ */}
@@ -313,7 +312,7 @@ export default function ChatAssistant({ projectId }: ChatAssistantProps) {
   )
 }
 
-// ── Scoring: คำนวณว่าบทสนทนา "พร้อมสรุป" แค่ไหน ──
+// ── Scoring ──
 const TOPIC_KEYWORDS = [
   'genre', 'แนวเกม', 'platform', 'แพลตฟอร์ม', 'target audience', 'กลุ่มเป้าหมาย',
   'core loop', 'core mechanic', 'กลไก', 'session', 'เซสชัน',
@@ -522,8 +521,26 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#92400E',
     border: '1px solid #FDE68A',
   },
-  summarizeBtn: {
+  satisfyCard: {
     margin: '0 12px 8px',
+    padding: '12px',
+    background: '#F0F7FC',
+    border: '1px solid #DCEDF8',
+    borderRadius: 10,
+  },
+  satisfyText: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#1A4A66',
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  satisfyBtnRow: {
+    display: 'flex',
+    gap: 8,
+  },
+  satisfyBtnPrimary: {
+    flex: 1,
     padding: '8px 12px',
     background: '#5AAEDB',
     color: '#fff',
@@ -532,7 +549,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
-    textAlign: 'center' as const,
+  },
+  satisfyBtnGhost: {
+    flex: 1,
+    padding: '8px 12px',
+    background: 'transparent',
+    color: '#5C8FAD',
+    border: '1px solid #B8DCF2',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   btnDisabled: {
     opacity: 0.5,

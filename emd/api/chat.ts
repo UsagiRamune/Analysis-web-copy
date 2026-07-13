@@ -19,6 +19,19 @@ GDD (Game Design Document) ในแพลตฟอร์มนี้คือ�
 - เวลาพูดเรื่อง revenue mix (สัดส่วน Ads/IAP) ให้ฟันธงสั้นๆ ว่าควรเน้นด้านไหนมากกว่า
   พร้อมเหตุผลอ้างอิงจาก genre/core loop/target audience ที่ให้มา
 
+## เคารพความพอใจของนักศึกษา (สำคัญมาก)
+- นักศึกษาเป็นเจ้าของ GDD ไม่ใช่คุณ เขามีสิทธิ์เลือกว่าจะเอาคำแนะนำข้อไหนไปใช้
+- ถ้านักศึกษาบอกว่า "พอแล้ว", "เข้าใจแล้ว", "โอเคแล้ว", "เดี๋ยวไปคิดต่อเอง" หรือแสดงว่าพอใจกับคำตอบแล้ว
+  → ให้หยุดถามต่อทันที ตอบรับสั้นๆ แล้วปล่อยให้เขาไปทำต่อ ห้ามพยายามลากให้ตอบให้ครบทุกแง่มุม
+- คุณไม่มีหน้าที่ "เก็บ checklist ให้ครบ" นักศึกษาอาจมีคำตอบอยู่ในหัวแล้ว หรือตั้งใจไปคิดทีหลัง
+- อย่าบังคับให้นักศึกษาตอบครบทุกหัวข้อก่อนถึงจะไปต่อได้ — เขาเลือกเองว่าจะคุยเรื่องไหนแค่ไหน
+
+## การถามคำถาม
+- ถามได้ แต่ถามทีละ 1 คำถามที่สำคัญที่สุดพอ ไม่ใช่ยิงหลายคำถามรวด
+- คำถามควรเป็น "ทางเลือกให้คิดต่อ" ไม่ใช่ "ข้อบังคับที่ต้องตอบ"
+- ถ้าให้คำแนะนำครบประเด็นที่นักศึกษาถามแล้ว ไม่จำเป็นต้องจบด้วยคำถามทุกครั้ง — จบแบบเปิดให้เขาเลือกก็ได้
+  เช่น "ถ้าอยากคุยเรื่องอื่นต่อ บอกได้เลย"
+
 ## ขอบเขต
 ตอบเฉพาะเรื่อง game design, monetization, ethics ของเกมเท่านั้น
 ถ้าผู้ใช้ถามนอกเรื่อง ให้ดึงกลับมาเรื่องการออกแบบเกมอย่างสุภาพ
@@ -207,21 +220,28 @@ export default async function handler(req: any, res: any) {
 
     // ── stream mode: provider รองรับ generateStream ──
     if (provider.generateStream) {
-      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
       res.setHeader('Cache-Control', 'no-cache')
       res.setHeader('Connection', 'keep-alive')
 
       try {
         for await (const chunk of provider.generateStream(generateParams)) {
-          if (chunk.done) {
-            res.write(`data: ${JSON.stringify({ done: true, usage: chunk.usage, provider: provider.name })}\n\n`)
-          } else {
-            res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`)
-          }
+          const payload = chunk.done
+            ? JSON.stringify({ done: true, usage: chunk.usage, provider: provider.name })
+            : JSON.stringify({ text: chunk.text })
+
+          // ← encode เป็น Buffer ก่อน write กัน ByteString error
+          res.write(Buffer.from(`data: ${payload}\n\n`, 'utf-8'))
         }
       } catch (streamErr: any) {
         console.error('[chat] stream error:', streamErr?.message)
-        res.write(`data: ${JSON.stringify({ error: streamErr?.message ?? 'AI ตอบไม่ได้ตอนนี้' })}\n\n`)
+        console.error('[chat] stream error STACK:', streamErr?.stack)
+
+        try {
+          res.write(Buffer.from(`data: ${JSON.stringify({ done: true, error: streamErr?.message ?? 'AI ตอบไม่ได้ตอนนี้' })}\n\n`, 'utf-8'))
+        } catch (writeErr: any) {
+          console.error('[chat] WRITE error:', writeErr?.message)
+        }
       }
 
       res.end()
